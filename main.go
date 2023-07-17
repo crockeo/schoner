@@ -107,8 +107,12 @@ func collectNames(fileAst *ast.File) ([]string, error) {
 
 		switch node := node.(type) {
 		case *ast.GenDecl:
-			// names = append(names, node.Specs[0].(*ast.ValueSpec).Names[0].Name)
-			// fmt.Println(node)
+			declNames, err := getDeclNames(node)
+			if err != nil {
+				walkErr = err
+				return false
+			}
+			names = append(names, declNames...)
 		case *ast.FuncDecl:
 			funcName, err := getFunctionName(node)
 			if err != nil {
@@ -123,8 +127,26 @@ func collectNames(fileAst *ast.File) ([]string, error) {
 	return names, walkErr
 }
 
-func getDeclName(decl ast.GenDecl) (string, error) {
-	panic("not implemented")
+func getDeclNames(decl *ast.GenDecl) ([]string, error) {
+	// TODO: only care about top-level declarations
+	names := []string{}
+	for _, spec := range decl.Specs {
+		switch spec := spec.(type) {
+		case *ast.ImportSpec:
+			// Intentionally ignoring ImportSpec in this phase,
+			// because we only care about declarations which are defined
+			// inside of this file.
+		case *ast.TypeSpec:
+			names = append(names, spec.Name.Name)
+		case *ast.ValueSpec:
+			for _, name := range spec.Names {
+				names = append(names, name.Name)
+			}
+		default:
+			return nil, fmt.Errorf("unknown spec type %T", spec)
+		}
+	}
+	return names, nil
 }
 
 func getFunctionName(fn *ast.FuncDecl) (string, error) {
