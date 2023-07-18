@@ -100,35 +100,47 @@ func collectNames(fileAst *ast.File) ([]string, error) {
 	names := []string{}
 
 	var walkErr error
+	path := []ast.Node{}
 	ast.Inspect(fileAst, func(node ast.Node) bool {
 		if walkErr != nil {
 			return false
 		}
+		if node == nil {
+			path = path[:len(path)-1]
+			return true
+		}
 
 		switch node := node.(type) {
 		case *ast.GenDecl:
-			declNames, err := getDeclNames(node)
+			declNames, err := getDeclNames(path, node)
 			if err != nil {
 				walkErr = err
 				return false
 			}
 			names = append(names, declNames...)
 		case *ast.FuncDecl:
-			funcName, err := getFunctionName(node)
+			funcName, err := getFunctionName(path, node)
 			if err != nil {
 				walkErr = err
 				return false
 			}
 			names = append(names, funcName)
 		}
+		path = append(path, node)
 		return true
 	})
 
 	return names, walkErr
 }
 
-func getDeclNames(decl *ast.GenDecl) ([]string, error) {
-	// TODO: only care about top-level declarations
+func getDeclNames(path []ast.Node, decl *ast.GenDecl) ([]string, error) {
+	lastNode := path[len(path)-1]
+	if _, ok := lastNode.(*ast.File); !ok {
+		// We only care about top-level declarations,
+		// because only those can be used by other packages.
+		return nil, nil
+	}
+
 	names := []string{}
 	for _, spec := range decl.Specs {
 		switch spec := spec.(type) {
@@ -149,7 +161,7 @@ func getDeclNames(decl *ast.GenDecl) ([]string, error) {
 	return names, nil
 }
 
-func getFunctionName(fn *ast.FuncDecl) (string, error) {
+func getFunctionName(path []ast.Node, fn *ast.FuncDecl) (string, error) {
 	funcName := fn.Name.Name
 	if fn.Recv != nil {
 		recvName, ok := getReceiverName(fn.Recv)
