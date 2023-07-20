@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/crockeo/schoner/pkg/phases"
-	"github.com/crockeo/schoner/pkg/phases/decls"
 )
 
 func main() {
@@ -17,12 +16,7 @@ func main() {
 
 func mainImpl() error {
 	for _, root := range os.Args[1:] {
-		projectDecls, err := phases.WalkFiles(
-			root,
-			struct{}{},
-			decls.FileDeclarations,
-			phases.WithIgnoreDirs(".git"),
-		)
+		projectDecls, err := phases.FindDeclarations(root, phases.WithIgnoreDirs(".git"))
 		if err != nil {
 			return err
 		}

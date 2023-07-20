@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-type FileDeclaration struct {
+type Declarations struct {
 	Symbols []string
 	Imports []ImportDeclaration
 }
@@ -18,7 +18,7 @@ type ImportDeclaration struct {
 	Path string
 }
 
-func FileDeclarations(context struct{}, fileset *token.FileSet, filename string, contents []byte) (*FileDeclaration, error) {
+func FindFileDeclarations(context struct{}, fileset *token.FileSet, filename string, contents []byte) (*Declarations, error) {
 	fileAst, err := parser.ParseFile(fileset, filename, contents, 0)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func FileDeclarations(context struct{}, fileset *token.FileSet, filename string,
 		return nil, err
 	}
 
-	return &FileDeclaration{
+	return &Declarations{
 		Symbols: symbols,
 		Imports: imports,
 	}, nil

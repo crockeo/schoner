@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/crockeo/schoner/pkg/set"
+	"github.com/crockeo/schoner/pkg/phases/decls"
 )
 
 type walkFilesOptions struct {
@@ -75,4 +76,13 @@ func WalkFiles[Context any, Result any](
 		return nil, err
 	}
 	return results, nil
+}
+
+func FindDeclarations(root string, options ...Option) (map[string]*decls.Declarations, error) {
+	return WalkFiles(
+		struct{}{},
+		root,
+		decls.FindFileDeclarations,
+		options...,
+	)
 }
