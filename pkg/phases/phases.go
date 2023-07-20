@@ -23,9 +23,9 @@ func WithIgnoreDirs(dirs ...string) func(*walkFilesOptions) {
 }
 
 func WalkFiles[Context any, Result any](
-	projectRoot string,
-	context Context,
-	visitor func(context Context, fileset *token.FileSet, filepath string, contents []byte) (Result, error),
+	ctx Context,
+	root string,
+	visitor func(ctx Context, fileset *token.FileSet, filename string, contents []byte) (Result, error),
 	options ...Option,
 ) (map[string]Result, error) {
 	realizedOptions := walkFilesOptions{
@@ -39,13 +39,13 @@ func WalkFiles[Context any, Result any](
 	if err != nil {
 		return nil, err
 	}
-	if !filepath.IsAbs(projectRoot) {
-		projectRoot = filepath.Join(wd, projectRoot)
+	if !filepath.IsAbs(root) {
+		root = filepath.Join(wd, root)
 	}
 
 	fileset := token.NewFileSet()
 	results := map[string]Result{}
-	if err := filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -65,7 +65,7 @@ func WalkFiles[Context any, Result any](
 		if err != nil {
 			return err
 		}
-		result, err := visitor(context, fileset, path, contents)
+		result, err := visitor(ctx, fileset, path, contents)
 		if err != nil {
 			return err
 		}
