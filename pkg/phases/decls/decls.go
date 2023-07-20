@@ -5,11 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
-	"path/filepath"
 	"strings"
-
-	"github.com/crockeo/schoner/pkg/set"
 )
 
 type FileDeclaration struct {
@@ -22,86 +18,7 @@ type ImportDeclaration struct {
 	Path string
 }
 
-type option struct {
-	ignoreDirs set.Set[string]
-}
-
-type Option func(*option)
-
-func WithIgnoreDirs(dirs ...string) Option {
-	return func(o *option) {
-		for _, dir := range dirs {
-			o.ignoreDirs.Add(dir)
-		}
-	}
-}
-
-func FindProjectDeclarations(projectRoot string, options ...Option) (map[string]*FileDeclaration, error) {
-	o := option{ignoreDirs: set.NewSet[string]()}
-	for _, option := range options {
-		option(&o)
-	}
-
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	if !filepath.IsAbs(projectRoot) {
-		projectRoot = filepath.Join(wd, projectRoot)
-	}
-
-	fileset := token.NewFileSet()
-	fileDeclarations := map[string]*FileDeclaration{}
-	err = filepath.Walk(projectRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			if o.ignoreDirs.Contains(filepath.Base(path)) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		if filepath.Ext(path) != ".go" {
-			return nil
-		}
-
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		fileDeclaration, err := findFileDeclaration(fileset, path, contents)
-		if err != nil {
-			return err
-		}
-		fileDeclarations[path] = fileDeclaration
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return fileDeclarations, nil
-}
-
-func FindFileDeclarations(filename string) (*FileDeclaration, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	if !filepath.IsAbs(filename) {
-		filename = filepath.Join(wd, filename)
-	}
-	contents, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	fileset := token.NewFileSet()
-	return findFileDeclaration(fileset, filename, contents)
-}
-
-func findFileDeclaration(fileset *token.FileSet, filename string, contents []byte) (*FileDeclaration, error) {
+func FileDeclarations(context struct{}, fileset *token.FileSet, filename string, contents []byte) (*FileDeclaration, error) {
 	fileAst, err := parser.ParseFile(fileset, filename, contents, 0)
 	if err != nil {
 		return nil, err
