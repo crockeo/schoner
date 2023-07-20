@@ -173,7 +173,7 @@ func getDeclNames(path []ast.Node, decl *ast.GenDecl) ([]string, error) {
 func getFunctionName(path []ast.Node, fn *ast.FuncDecl) (string, error) {
 	funcName := fn.Name.Name
 	if fn.Recv != nil {
-		recvName, ok := getReceiverName(fn.Recv)
+		recvName, ok := exprName(fn.Recv.List[0].Type)
 		if !ok {
 			return "", fmt.Errorf("failed to get receiver name for %s", fn.Name.Name)
 		}
@@ -188,6 +188,21 @@ func getReceiverName(recv *ast.FieldList) (string, bool) {
 		return typename.Name, true
 	case *ast.StarExpr:
 		return typename.X.(*ast.Ident).Name, true
+	case *ast.IndexExpr:
+		return typename.X.(*ast.Ident).Name, true
+	default:
+		return "", false
+	}
+}
+
+func exprName(expr ast.Expr) (string, bool) {
+	switch expr := expr.(type) {
+	case *ast.Ident:
+		return expr.Name, true
+	case *ast.StarExpr:
+		return exprName(expr.X)
+	case *ast.IndexExpr:
+		return exprName(expr.X)
 	default:
 		return "", false
 	}
