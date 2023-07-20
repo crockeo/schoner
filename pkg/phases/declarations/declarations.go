@@ -1,4 +1,4 @@
-package decls
+package declarations
 
 import (
 	"fmt"
