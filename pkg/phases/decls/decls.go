@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/crockeo/schoner/pkg/set"
 )
@@ -28,7 +29,7 @@ type option struct {
 type Option func(*option)
 
 func WithIgnoreDirs(dirs ...string) Option {
-	return func (o *option) {
+	return func(o *option) {
 		for _, dir := range dirs {
 			o.ignoreDirs.Add(dir)
 		}
@@ -105,19 +106,11 @@ func findFileDeclaration(fileset *token.FileSet, filename string, contents []byt
 	if err != nil {
 		return nil, err
 	}
-	symbols, err := collectNames(fileAst)
-	if err != nil {
-		return nil, err
-	}
-	return &FileDeclaration{
-		Symbols: symbols,
-	}, nil
-}
 
-func collectNames(fileAst *ast.File) ([]string, error) {
-	names := []string{}
+	symbols := []string{}
+	imports := []ImportDeclaration{}
 	path := []ast.Node{}
-	return names, walk(fileAst, func(node ast.Node) error {
+	err = walk(fileAst, func(node ast.Node) error {
 		if node == nil {
 			path = path[:len(path)-1]
 			return nil
@@ -125,38 +118,59 @@ func collectNames(fileAst *ast.File) ([]string, error) {
 
 		switch node := node.(type) {
 		case *ast.GenDecl:
-			declNames, err := getDeclNames(path, node)
+			declNames, importDecls, err := getDeclNames(path, node)
 			if err != nil {
 				return err
 			}
-			names = append(names, declNames...)
+			symbols = append(symbols, declNames...)
+			imports = append(imports, importDecls...)
 		case *ast.FuncDecl:
 			funcName, err := getFunctionName(path, node)
 			if err != nil {
 				return err
 			}
-			names = append(names, funcName)
+			symbols = append(symbols, funcName)
 		}
 		path = append(path, node)
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &FileDeclaration{
+		Symbols: symbols,
+		Imports: imports,
+	}, nil
 }
 
-func getDeclNames(path []ast.Node, decl *ast.GenDecl) ([]string, error) {
+func getDeclNames(path []ast.Node, decl *ast.GenDecl) ([]string, []ImportDeclaration, error) {
 	lastNode := path[len(path)-1]
 	if _, ok := lastNode.(*ast.File); !ok {
 		// We only care about top-level declarations,
 		// because only those can be used by other packages.
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	names := []string{}
+	importDecls := []ImportDeclaration{}
 	for _, spec := range decl.Specs {
 		switch spec := spec.(type) {
 		case *ast.ImportSpec:
 			// Intentionally ignoring ImportSpec in this phase,
 			// because we only care about declarations which are defined
 			// inside of this file.
+			if spec.Path.Kind != token.STRING {
+				return nil, nil, fmt.Errorf("import path is not a string token")
+			}
+			importDecl := ImportDeclaration{
+				Path: strings.Trim(spec.Path.Value, "\""),
+			}
+			if spec.Name != nil {
+				importDecl.Name = spec.Name.Name
+			}
+			importDecls = append(importDecls, importDecl)
+
 		case *ast.TypeSpec:
 			names = append(names, spec.Name.Name)
 		case *ast.ValueSpec:
@@ -164,10 +178,10 @@ func getDeclNames(path []ast.Node, decl *ast.GenDecl) ([]string, error) {
 				names = append(names, name.Name)
 			}
 		default:
-			return nil, fmt.Errorf("unknown spec type %T", spec)
+			return nil, nil, fmt.Errorf("unknown spec type %T", spec)
 		}
 	}
-	return names, nil
+	return names, importDecls, nil
 }
 
 func getFunctionName(path []ast.Node, fn *ast.FuncDecl) (string, error) {

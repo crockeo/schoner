@@ -26,6 +26,12 @@ func mainImpl() error {
 			for _, decl := range fileDecls.Symbols {
 				fmt.Println("  ", decl)
 			}
+			fmt.Println("   ---")
+			for _, importDecl := range fileDecls.Imports {
+				fmt.Println("  ", fmt.Sprintf("`%s`", importDecl.Name), importDecl.Path)
+			}
+			fmt.Println()
+			fmt.Println()
 		}
 	}
 
