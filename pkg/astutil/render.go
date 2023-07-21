@@ -23,6 +23,18 @@ func ExprName(expr ast.Expr) (string, bool) {
 	}
 }
 
+func FunctionName(fn *ast.FuncDecl) (string, error) {
+	funcName := fn.Name.Name
+	if fn.Recv != nil {
+		recvName, ok := ExprName(fn.Recv.List[0].Type)
+		if !ok {
+			return "", fmt.Errorf("failed to get receiver name for %s", fn.Name.Name)
+		}
+		funcName = Qualify(recvName, funcName)
+	}
+	return funcName, nil
+}
+
 func RenderDecl(decl ast.Decl) (string, error) {
 	switch decl := decl.(type) {
 	case *ast.GenDecl:

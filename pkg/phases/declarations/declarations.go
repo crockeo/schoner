@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"strings"
 
+	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/set"
 )
 
@@ -45,7 +46,7 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 				declarations.Imports.Add(importDecl)
 			}
 		case *ast.FuncDecl:
-			funcName, err := getFunctionName(decl)
+			funcName, err := astutil.FunctionName(decl)
 			if err != nil {
 				return nil, err
 			}
@@ -90,42 +91,4 @@ func getDeclNames(decl *ast.GenDecl) ([]string, []ImportDeclaration, error) {
 		}
 	}
 	return names, importDecls, nil
-}
-
-func getFunctionName(fn *ast.FuncDecl) (string, error) {
-	funcName := fn.Name.Name
-	if fn.Recv != nil {
-		recvName, ok := exprName(fn.Recv.List[0].Type)
-		if !ok {
-			return "", fmt.Errorf("failed to get receiver name for %s", fn.Name.Name)
-		}
-		funcName = fmt.Sprintf("%s::%s", recvName, funcName)
-	}
-	return funcName, nil
-}
-
-func getReceiverName(recv *ast.FieldList) (string, bool) {
-	switch typename := recv.List[0].Type.(type) {
-	case *ast.Ident:
-		return typename.Name, true
-	case *ast.StarExpr:
-		return typename.X.(*ast.Ident).Name, true
-	case *ast.IndexExpr:
-		return typename.X.(*ast.Ident).Name, true
-	default:
-		return "", false
-	}
-}
-
-func exprName(expr ast.Expr) (string, bool) {
-	switch expr := expr.(type) {
-	case *ast.Ident:
-		return expr.Name, true
-	case *ast.StarExpr:
-		return exprName(expr.X)
-	case *ast.IndexExpr:
-		return exprName(expr.X)
-	default:
-		return "", false
-	}
 }
