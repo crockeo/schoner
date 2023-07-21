@@ -1,6 +1,7 @@
 package phases
 
 import (
+	"fmt"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"github.com/crockeo/schoner/pkg/phases/declarations"
 	"github.com/crockeo/schoner/pkg/phases/references"
 	"github.com/crockeo/schoner/pkg/set"
+	"golang.org/x/mod/modfile"
 )
 
 type walkFilesOptions struct {
@@ -89,8 +91,26 @@ func FindDeclarations(root string, options ...Option) (map[string]*declarations.
 }
 
 func FindReferences(root string, declarations map[string]*declarations.Declarations, options ...Option) (map[string]*references.References, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("failed to normalize the root")
+	}
+	goModContents, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to find go module root: %w", err)
+	}
+	modulePath := modfile.ModulePath(goModContents)
+	if modulePath == "" {
+		return nil, fmt.Errorf("failed to parse module path from go module: %w", err)
+	}
+
+	ctx := &references.ReferencesContext{
+		ProjectRoot:  root,
+		GoModRoot:    modulePath,
+		Declarations: declarations,
+	}
 	return WalkFiles(
-		declarations,
+		ctx,
 		root,
 		references.FindReferences,
 		options...,

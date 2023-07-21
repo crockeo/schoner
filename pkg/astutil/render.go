@@ -48,9 +48,8 @@ func RenderDecl(decl ast.Decl) (string, error) {
 
 func renderGenDecl(decl *ast.GenDecl) (string, error) {
 	// TODO: handle more than one spec
+	// TODO: what do we want to do with an ImportSpec?
 	switch decl := decl.Specs[0].(type) {
-	case *ast.ImportSpec:
-		panic("not implemented")
 	case *ast.TypeSpec:
 		return decl.Name.Name, nil
 	case *ast.ValueSpec:

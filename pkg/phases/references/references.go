@@ -5,17 +5,39 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"path/filepath"
+	"strings"
 
 	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/phases/declarations"
 	"github.com/crockeo/schoner/pkg/set"
 )
 
+// find all references in a file
+//
+// 3 kinds of references:
+//
+// - static local references, where an ast.Ident references a delcaration in the current file
+//
+// - static imorted references, where an ast.SelectorExpr references a declaration in an imported file
+//
+// - dynamic references, where an ast.SelectorExpr references a field or method on another
+
+type ReferencesContext struct {
+	ProjectRoot  string
+	GoModRoot    string
+	Declarations map[string]*declarations.Declarations
+}
+
 type References struct {
 	References map[string]set.Set[string]
 }
 
 func (r *References) Add(from string, to string) {
+	if from == to {
+		return
+	}
+
 	if _, ok := r.References[from]; !ok {
 		r.References[from] = set.NewSet[string]()
 	}
@@ -23,12 +45,12 @@ func (r *References) Add(from string, to string) {
 }
 
 func FindReferences(
-	context map[string]*declarations.Declarations,
+	ctx *ReferencesContext,
 	fileset *token.FileSet,
 	filename string,
 	contents []byte,
 ) (*References, error) {
-	_, ok := context[filename]
+	ourDeclarations, ok := ctx.Declarations[filename]
 	if !ok {
 		return nil, fmt.Errorf("no declarations for file %s", filename)
 	}
@@ -47,21 +69,29 @@ func FindReferences(
 		}
 		defer func() { path = append(path, node) }()
 
-		from := filename
+		from := "global"
 		container, err := astutil.OuterDeclName(path)
 		if err == nil {
-			from = astutil.Qualify(from, container)
+			from = container
 		}
 
-		var to string
-		switch node := node.(type) {
-		case *ast.Ident:
-			to = astutil.Qualify(filename, node.Name)
-		default:
+		if node, ok := node.(*ast.Ident); ok {
+			if !ourDeclarations.Symbols.Contains(node.Name) {
+				return nil
+			}
+			references.Add(from, node.Name)
 			return nil
 		}
 
-		references.Add(from, to)
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return nil
+		}
+		selectorTarget, ok := findSelectorTarget(ctx, ourDeclarations, selector)
+		if !ok {
+			return nil
+		}
+		references.Add(from, selectorTarget)
 		return nil
 	})
 	if err != nil {
@@ -69,4 +99,58 @@ func FindReferences(
 	}
 
 	return references, nil
+}
+
+func findSelectorTarget(
+	ctx *ReferencesContext,
+	ourDeclarations *declarations.Declarations,
+	selector *ast.SelectorExpr,
+) (string, bool) {
+	ident, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	selectorName := ident.Name
+	importDecl, ok := findImportDecl(ourDeclarations.Imports, selectorName)
+	if !ok {
+		return "", false
+	}
+
+	prefixLen := len(ctx.GoModRoot)
+	if prefixLen > len(importDecl.Path) {
+		prefixLen = len(importDecl.Path)
+	}
+	if importDecl.Path[:prefixLen] != ctx.GoModRoot {
+		return "", false
+	}
+	pathSuffix := importDecl.Path[prefixLen:]
+	pathSuffix = strings.TrimPrefix(pathSuffix, "/")
+
+	searchTarget := ctx.ProjectRoot
+	if pathSuffix != "" {
+		searchTarget = filepath.Join(searchTarget, pathSuffix)
+	}
+	for filename, declarations := range ctx.Declarations {
+		if !strings.HasPrefix(filename, searchTarget) {
+			continue
+		}
+		if declarations.Symbols.Contains(selector.Sel.Name) {
+			return astutil.Qualify(filename, selector.Sel.Name), true
+		}
+	}
+	return "", false
+}
+
+func findImportDecl(imports set.Set[declarations.ImportDeclaration], selectorName string) (*declarations.ImportDeclaration, bool) {
+	for importDecl := range imports {
+		if selectorName == importDecl.Name {
+			return &importDecl, true
+		}
+
+		lastPart := filepath.Base(importDecl.Path)
+		if selectorName == lastPart {
+			return &importDecl, true
+		}
+	}
+	return nil, false
 }
