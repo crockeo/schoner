@@ -21,6 +21,13 @@ type Declaration struct {
 	Name     string
 }
 
+func (d Declaration) QualifiedName() string {
+	if d.Name == "" {
+		return d.Filename
+	}
+	return astutil.Qualify(d.Filename, d.Name)
+}
+
 type Import struct {
 	Filename string
 	Name     string

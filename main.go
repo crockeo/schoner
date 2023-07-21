@@ -3,8 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/crockeo/schoner/pkg/phases"
+	"github.com/crockeo/schoner/pkg/phases/declarations"
+	"github.com/crockeo/schoner/pkg/phases/references"
+	"github.com/crockeo/schoner/pkg/set"
+	"github.com/crockeo/schoner/pkg/visualize"
 )
 
 func main() {
@@ -16,41 +21,67 @@ func main() {
 
 func mainImpl() error {
 	for _, root := range os.Args[1:] {
-		declarations, err := phases.FindDeclarations(root, phases.WithIgnoreDirs(".git"))
+		root, err := filepath.Abs(root)
 		if err != nil {
 			return err
 		}
 
-		references, err := phases.FindReferences(root, declarations, phases.WithIgnoreDirs(".git"))
+		decls, err := phases.FindDeclarations(root, phases.WithIgnoreDirs(".git"))
 		if err != nil {
 			return err
 		}
 
-		_ = references
-
-		for filename, fileDecls := range declarations {
-			fmt.Println(filename)
-			for decl := range fileDecls.Declarations {
-				fmt.Println("  ", decl)
-			}
-			fmt.Println("   ---")
-			for importDecl := range fileDecls.Imports {
-				fmt.Println("  ", fmt.Sprintf("`%s`", importDecl.Name), importDecl.Path)
-			}
-			fmt.Println()
-			fmt.Println()
+		refs, err := phases.FindReferences(root, decls, phases.WithIgnoreDirs(".git"))
+		if err != nil {
+			return err
 		}
 
-		for filename, fileReferences := range references {
-			fmt.Println(filename)
-			for from, tos := range fileReferences.References {
-				fmt.Println("  ", from, "->")
-				for to := range tos {
-					fmt.Println("    ", to)
+		// renderDecls(decls)
+		// renderRefs(refs)
+
+		flattenedReferences := map[declarations.Declaration]set.Set[declarations.Declaration]{}
+		for _, fileRefs := range refs {
+			for decl, targets := range fileRefs.References {
+				if _, ok := flattenedReferences[decl]; !ok {
+					flattenedReferences[decl] = set.NewSet[declarations.Declaration]()
 				}
+				flattenedReferences[decl].UnionInPlace(targets)
 			}
+		}
+		if err := visualize.Visualize(
+			fmt.Sprintf("%s.svg", filepath.Base(root)),
+			flattenedReferences,
+		); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func renderDecls(decls map[string]*declarations.Declarations) {
+	for filename, fileDecls := range decls {
+		fmt.Println(filename)
+		for decl := range fileDecls.Declarations {
+			fmt.Println("  ", decl)
+		}
+		fmt.Println("   ---")
+		for importDecl := range fileDecls.Imports {
+			fmt.Println("  ", fmt.Sprintf("`%s`", importDecl.Name), importDecl.Path)
+		}
+		fmt.Println()
+		fmt.Println()
+	}
+}
+
+func renderRefs(refs map[string]*references.References) {
+	for filename, fileReferences := range refs {
+		fmt.Println(filename)
+		for from, tos := range fileReferences.References {
+			fmt.Println("  ", from, "->")
+			for to := range tos {
+				fmt.Println("    ", to)
+			}
+		}
+	}
 }

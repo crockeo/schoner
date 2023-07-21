@@ -14,6 +14,14 @@ func (s Set[T]) Add(v T) bool {
 	return true
 }
 
+func (s Set[T]) UnionInPlace(other Set[T]) bool {
+	addedAny := false
+	for value := range other {
+		addedAny = addedAny || s.Add(value)
+	}
+	return addedAny
+}
+
 func (s Set[T]) Remove(v T) bool {
 	if _, ok := s[v]; !ok {
 		return false
