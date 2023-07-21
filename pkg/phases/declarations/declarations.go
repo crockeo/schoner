@@ -33,62 +33,44 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 		Imports: set.NewSet[ImportDeclaration](),
 	}
 	for _, decl := range fileAst.Decls {
-		switch decl := decl.(type) {
-		case *ast.GenDecl:
-			declNames, importDecls, err := getDeclNames(decl)
-			if err != nil {
-				return nil, err
-			}
-			for _, declName := range declNames {
-				declarations.Symbols.Add(declName)
-			}
-			for _, importDecl := range importDecls {
-				declarations.Imports.Add(importDecl)
-			}
-		case *ast.FuncDecl:
+		if decl, ok := decl.(*ast.FuncDecl); ok {
 			funcName, err := astutil.FunctionName(decl)
 			if err != nil {
 				return nil, err
 			}
 			declarations.Symbols.Add(funcName)
+			continue
 		}
-	}
-	if err != nil {
-		return nil, err
+
+		decl, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+
+		for _, spec := range decl.Specs {
+			switch spec := spec.(type) {
+			case *ast.ImportSpec:
+				if spec.Path.Kind != token.STRING {
+					return nil, fmt.Errorf("import path is not a string token")
+				}
+				importDecl := ImportDeclaration{
+					Path: strings.Trim(spec.Path.Value, "\""),
+				}
+				if spec.Name != nil {
+					importDecl.Name = spec.Name.Name
+				}
+				declarations.Imports.Add(importDecl)
+
+			case *ast.TypeSpec:
+				declarations.Symbols.Add(spec.Name.Name)
+
+			case *ast.ValueSpec:
+				for _, name := range spec.Names {
+					declarations.Symbols.Add(name.Name)
+				}
+			}
+		}
 	}
 
 	return declarations, nil
-}
-
-func getDeclNames(decl *ast.GenDecl) ([]string, []ImportDeclaration, error) {
-	names := []string{}
-	importDecls := []ImportDeclaration{}
-	for _, spec := range decl.Specs {
-		switch spec := spec.(type) {
-		case *ast.ImportSpec:
-			// Intentionally ignoring ImportSpec in this phase,
-			// because we only care about declarations which are defined
-			// inside of this file.
-			if spec.Path.Kind != token.STRING {
-				return nil, nil, fmt.Errorf("import path is not a string token")
-			}
-			importDecl := ImportDeclaration{
-				Path: strings.Trim(spec.Path.Value, "\""),
-			}
-			if spec.Name != nil {
-				importDecl.Name = spec.Name.Name
-			}
-			importDecls = append(importDecls, importDecl)
-
-		case *ast.TypeSpec:
-			names = append(names, spec.Name.Name)
-		case *ast.ValueSpec:
-			for _, name := range spec.Names {
-				names = append(names, name.Name)
-			}
-		default:
-			return nil, nil, fmt.Errorf("unknown spec type %T", spec)
-		}
-	}
-	return names, importDecls, nil
 }
