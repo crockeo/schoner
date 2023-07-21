@@ -1,0 +1,12 @@
+repos:
+-   repo: https://github.com/golangci/golangci-lint
+    rev: v1.53.3
+    hooks:
+    -   id: golangci-lint
+-   repo: local
+    hooks:
+    -   id: test
+        name: test
+        language: system
+        entry: go test ./... -count=1
+        pass_filenames: false
