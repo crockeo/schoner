@@ -6,10 +6,13 @@ import (
 	"go/parser"
 	"go/token"
 	"strings"
+
+	"github.com/crockeo/schoner/pkg/astutil"
+	"github.com/crockeo/schoner/pkg/set"
 )
 
 type Declarations struct {
-	Symbols []string
+	Symbols set.Set[string]
 	Imports []ImportDeclaration
 }
 
@@ -18,16 +21,17 @@ type ImportDeclaration struct {
 	Path string
 }
 
-func FindFileDeclarations(context struct{}, fileset *token.FileSet, filename string, contents []byte) (*Declarations, error) {
+func FindDeclarations(context struct{}, fileset *token.FileSet, filename string, contents []byte) (*Declarations, error) {
 	fileAst, err := parser.ParseFile(fileset, filename, contents, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	symbols := []string{}
+	// TODO: this could probably be simplified by just looping through fileAst.Decls
+	symbols := set.NewSet[string]()
 	imports := []ImportDeclaration{}
 	path := []ast.Node{}
-	err = walk(fileAst, func(node ast.Node) error {
+	err = astutil.Walk(fileAst, func(node ast.Node) error {
 		if node == nil {
 			path = path[:len(path)-1]
 			return nil
@@ -39,14 +43,16 @@ func FindFileDeclarations(context struct{}, fileset *token.FileSet, filename str
 			if err != nil {
 				return err
 			}
-			symbols = append(symbols, declNames...)
+			for _, declName := range declNames {
+				symbols.Add(declName)
+			}
 			imports = append(imports, importDecls...)
 		case *ast.FuncDecl:
 			funcName, err := getFunctionName(path, node)
 			if err != nil {
 				return err
 			}
-			symbols = append(symbols, funcName)
+			symbols.Add(funcName)
 		}
 		path = append(path, node)
 		return nil
@@ -137,16 +143,4 @@ func exprName(expr ast.Expr) (string, bool) {
 	default:
 		return "", false
 	}
-}
-
-func walk(node ast.Node, fn func(ast.Node) error) error {
-	var err error
-	ast.Inspect(node, func(node ast.Node) bool {
-		if err != nil {
-			return false
-		}
-		err = fn(node)
-		return true
-	})
-	return err
 }

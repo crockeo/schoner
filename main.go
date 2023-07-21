@@ -16,14 +16,21 @@ func main() {
 
 func mainImpl() error {
 	for _, root := range os.Args[1:] {
-		projectDecls, err := phases.FindDeclarations(root, phases.WithIgnoreDirs(".git"))
+		declarations, err := phases.FindDeclarations(root, phases.WithIgnoreDirs(".git"))
 		if err != nil {
 			return err
 		}
 
-		for filename, fileDecls := range projectDecls {
+		references, err := phases.FindReferences(root, declarations, phases.WithIgnoreDirs(".git"))
+		if err != nil {
+			return err
+		}
+
+		_ = references
+
+		for filename, fileDecls := range declarations {
 			fmt.Println(filename)
-			for _, decl := range fileDecls.Symbols {
+			for decl := range fileDecls.Symbols {
 				fmt.Println("  ", decl)
 			}
 			fmt.Println("   ---")
@@ -32,6 +39,16 @@ func mainImpl() error {
 			}
 			fmt.Println()
 			fmt.Println()
+		}
+
+		for filename, fileReferences := range references {
+			fmt.Println(filename)
+			for from, tos := range fileReferences.References {
+				fmt.Println("  ", from, "->")
+				for to := range tos {
+					fmt.Println("    ", to)
+				}
+			}
 		}
 	}
 
