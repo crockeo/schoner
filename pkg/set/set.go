@@ -17,7 +17,9 @@ func (s Set[T]) Add(v T) bool {
 func (s Set[T]) UnionInPlace(other Set[T]) bool {
 	addedAny := false
 	for value := range other {
-		addedAny = addedAny || s.Add(value)
+		if s.Add(value) {
+			addedAny = true
+		}
 	}
 	return addedAny
 }
