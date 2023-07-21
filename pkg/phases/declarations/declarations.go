@@ -7,13 +7,12 @@ import (
 	"go/token"
 	"strings"
 
-	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/set"
 )
 
 type Declarations struct {
 	Symbols set.Set[string]
-	Imports []ImportDeclaration
+	Imports set.Set[ImportDeclaration]
 }
 
 type ImportDeclaration struct {
@@ -28,53 +27,39 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 	}
 
 	// TODO: this could probably be simplified by just looping through fileAst.Decls
-	symbols := set.NewSet[string]()
-	imports := []ImportDeclaration{}
-	path := []ast.Node{}
-	err = astutil.Walk(fileAst, func(node ast.Node) error {
-		if node == nil {
-			path = path[:len(path)-1]
-			return nil
-		}
-
-		switch node := node.(type) {
+	declarations := &Declarations{
+		Symbols: set.NewSet[string](),
+		Imports: set.NewSet[ImportDeclaration](),
+	}
+	for _, decl := range fileAst.Decls {
+		switch decl := decl.(type) {
 		case *ast.GenDecl:
-			declNames, importDecls, err := getDeclNames(path, node)
+			declNames, importDecls, err := getDeclNames(decl)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			for _, declName := range declNames {
-				symbols.Add(declName)
+				declarations.Symbols.Add(declName)
 			}
-			imports = append(imports, importDecls...)
+			for _, importDecl := range importDecls {
+				declarations.Imports.Add(importDecl)
+			}
 		case *ast.FuncDecl:
-			funcName, err := getFunctionName(path, node)
+			funcName, err := getFunctionName(decl)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			symbols.Add(funcName)
+			declarations.Symbols.Add(funcName)
 		}
-		path = append(path, node)
-		return nil
-	})
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	return &Declarations{
-		Symbols: symbols,
-		Imports: imports,
-	}, nil
+	return declarations, nil
 }
 
-func getDeclNames(path []ast.Node, decl *ast.GenDecl) ([]string, []ImportDeclaration, error) {
-	lastNode := path[len(path)-1]
-	if _, ok := lastNode.(*ast.File); !ok {
-		// We only care about top-level declarations,
-		// because only those can be used by other packages.
-		return nil, nil, nil
-	}
-
+func getDeclNames(decl *ast.GenDecl) ([]string, []ImportDeclaration, error) {
 	names := []string{}
 	importDecls := []ImportDeclaration{}
 	for _, spec := range decl.Specs {
@@ -107,7 +92,7 @@ func getDeclNames(path []ast.Node, decl *ast.GenDecl) ([]string, []ImportDeclara
 	return names, importDecls, nil
 }
 
-func getFunctionName(path []ast.Node, fn *ast.FuncDecl) (string, error) {
+func getFunctionName(fn *ast.FuncDecl) (string, error) {
 	funcName := fn.Name.Name
 	if fn.Recv != nil {
 		recvName, ok := exprName(fn.Recv.List[0].Type)
