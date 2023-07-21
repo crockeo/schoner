@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/crockeo/schoner/pkg/phases/declarations"
 	"github.com/crockeo/schoner/pkg/phases/references"
@@ -90,7 +91,7 @@ func FindDeclarations(root string, options ...Option) (map[string]*declarations.
 	)
 }
 
-func FindReferences(root string, declarations map[string]*declarations.Declarations, options ...Option) (map[string]*references.References, error) {
+func FindReferences(root string, decls map[string]*declarations.Declarations, options ...Option) (map[string]*references.References, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("failed to normalize the root")
@@ -103,11 +104,16 @@ func FindReferences(root string, declarations map[string]*declarations.Declarati
 	if modulePath == "" {
 		return nil, fmt.Errorf("failed to parse module path from go module: %w", err)
 	}
+	declarationLookup, err := makeDeclarationLookup(root, modulePath, decls)
+	if err != nil {
+		return nil, fmt.Errorf("failed to produce declaration lookup: %w", err)
+	}
 
 	ctx := &references.ReferencesContext{
-		ProjectRoot:  root,
-		GoModRoot:    modulePath,
-		Declarations: declarations,
+		ProjectRoot:       root,
+		GoModRoot:         modulePath,
+		Declarations:      decls,
+		DeclarationLookup: declarationLookup,
 	}
 	return WalkFiles(
 		ctx,
@@ -115,4 +121,34 @@ func FindReferences(root string, declarations map[string]*declarations.Declarati
 		references.FindReferences,
 		options...,
 	)
+}
+
+func makeDeclarationLookup(
+	root string,
+	rootModule string,
+	projectDecls map[string]*declarations.Declarations,
+) (map[string]map[string]declarations.Declaration, error) {
+	// module -> symbol -> declaration
+	declarationLookup := map[string]map[string]declarations.Declaration{}
+	for filename, decls := range projectDecls {
+		if !strings.HasPrefix(filename, root) {
+			return nil, fmt.Errorf("file %s does not start with root %s", filename, root)
+		}
+		suffix := filename[len(root):]
+		suffix = strings.TrimPrefix(suffix, "/")
+
+		module := rootModule
+		if suffix != "" {
+			module = filepath.Join(module, filepath.Dir(suffix))
+		}
+
+		if _, ok := declarationLookup[module]; !ok {
+			declarationLookup[module] = map[string]declarations.Declaration{}
+		}
+
+		for decl := range decls.Declarations {
+			declarationLookup[module][decl.Name] = decl
+		}
+	}
+	return declarationLookup, nil
 }

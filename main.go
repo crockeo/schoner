@@ -30,7 +30,7 @@ func mainImpl() error {
 
 		for filename, fileDecls := range declarations {
 			fmt.Println(filename)
-			for decl := range fileDecls.Symbols {
+			for decl := range fileDecls.Declarations {
 				fmt.Println("  ", decl)
 			}
 			fmt.Println("   ---")

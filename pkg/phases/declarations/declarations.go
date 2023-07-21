@@ -12,13 +12,19 @@ import (
 )
 
 type Declarations struct {
-	Symbols set.Set[string]
-	Imports set.Set[ImportDeclaration]
+	Declarations set.Set[Declaration]
+	Imports      set.Set[Import]
 }
 
-type ImportDeclaration struct {
-	Name string
-	Path string
+type Declaration struct {
+	Filename string
+	Name     string
+}
+
+type Import struct {
+	Filename string
+	Name     string
+	Path     string
 }
 
 func FindDeclarations(context struct{}, fileset *token.FileSet, filename string, contents []byte) (*Declarations, error) {
@@ -29,8 +35,8 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 
 	// TODO: this could probably be simplified by just looping through fileAst.Decls
 	declarations := &Declarations{
-		Symbols: set.NewSet[string](),
-		Imports: set.NewSet[ImportDeclaration](),
+		Declarations: set.NewSet[Declaration](),
+		Imports:      set.NewSet[Import](),
 	}
 	for _, decl := range fileAst.Decls {
 		if decl, ok := decl.(*ast.FuncDecl); ok {
@@ -38,7 +44,10 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 			if err != nil {
 				return nil, err
 			}
-			declarations.Symbols.Add(funcName)
+			declarations.Declarations.Add(Declaration{
+				Filename: filename,
+				Name:     funcName,
+			})
 			continue
 		}
 
@@ -53,7 +62,7 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 				if spec.Path.Kind != token.STRING {
 					return nil, fmt.Errorf("import path is not a string token")
 				}
-				importDecl := ImportDeclaration{
+				importDecl := Import{
 					Path: strings.Trim(spec.Path.Value, "\""),
 				}
 				if spec.Name != nil {
@@ -62,11 +71,17 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 				declarations.Imports.Add(importDecl)
 
 			case *ast.TypeSpec:
-				declarations.Symbols.Add(spec.Name.Name)
+				declarations.Declarations.Add(Declaration{
+					Filename: filename,
+					Name:     spec.Name.Name,
+				})
 
 			case *ast.ValueSpec:
 				for _, name := range spec.Names {
-					declarations.Symbols.Add(name.Name)
+					declarations.Declarations.Add(Declaration{
+						Filename: filename,
+						Name:     name.Name,
+					})
 				}
 			}
 		}

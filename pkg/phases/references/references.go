@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
-	"strings"
 
 	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/phases/declarations"
@@ -24,22 +23,23 @@ import (
 // - dynamic references, where an ast.SelectorExpr references a field or method on another
 
 type ReferencesContext struct {
-	ProjectRoot  string
-	GoModRoot    string
-	Declarations map[string]*declarations.Declarations
+	ProjectRoot       string
+	GoModRoot         string
+	Declarations      map[string]*declarations.Declarations
+	DeclarationLookup map[string]map[string]declarations.Declaration
 }
 
 type References struct {
-	References map[string]set.Set[string]
+	References map[declarations.Declaration]set.Set[declarations.Declaration]
 }
 
-func (r *References) Add(from string, to string) {
+func (r *References) Add(from declarations.Declaration, to declarations.Declaration) {
 	if from == to {
 		return
 	}
 
 	if _, ok := r.References[from]; !ok {
-		r.References[from] = set.NewSet[string]()
+		r.References[from] = set.NewSet[declarations.Declaration]()
 	}
 	r.References[from].Add(to)
 }
@@ -54,13 +54,17 @@ func FindReferences(
 	if !ok {
 		return nil, fmt.Errorf("no declarations for file %s", filename)
 	}
+	ourDeclarationsByName := map[string]declarations.Declaration{}
+	for decl := range ourDeclarations.Declarations {
+		ourDeclarationsByName[decl.Name] = decl
+	}
 
 	fileAst, err := parser.ParseFile(fileset, filename, contents, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	references := &References{References: map[string]set.Set[string]{}}
+	references := &References{References: map[declarations.Declaration]set.Set[declarations.Declaration]{}}
 	path := []ast.Node{}
 	err = astutil.Walk(fileAst, func(node ast.Node) error {
 		if node == nil {
@@ -69,17 +73,20 @@ func FindReferences(
 		}
 		defer func() { path = append(path, node) }()
 
-		from := "global"
+		from := declarations.Declaration{Filename: filename}
 		container, err := astutil.OuterDeclName(path)
 		if err == nil {
-			from = container
+			from.Name = container
 		}
 
 		if node, ok := node.(*ast.Ident); ok {
-			if !ourDeclarations.Symbols.Contains(node.Name) {
+			if _, ok := ourDeclarationsByName[node.Name]; !ok {
 				return nil
 			}
-			references.Add(from, node.Name)
+			references.Add(from, declarations.Declaration{
+				Filename: filename,
+				Name:     node.Name,
+			})
 			return nil
 		}
 
@@ -105,43 +112,26 @@ func findSelectorTarget(
 	ctx *ReferencesContext,
 	ourDeclarations *declarations.Declarations,
 	selector *ast.SelectorExpr,
-) (string, bool) {
+) (declarations.Declaration, bool) {
 	ident, ok := selector.X.(*ast.Ident)
 	if !ok {
-		return "", false
+		return declarations.Declaration{}, false
 	}
 	selectorName := ident.Name
 	importDecl, ok := findImportDecl(ourDeclarations.Imports, selectorName)
 	if !ok {
-		return "", false
+		return declarations.Declaration{}, false
 	}
 
-	prefixLen := len(ctx.GoModRoot)
-	if prefixLen > len(importDecl.Path) {
-		prefixLen = len(importDecl.Path)
+	moduleDecls, ok := ctx.DeclarationLookup[importDecl.Path]
+	if !ok {
+		return declarations.Declaration{}, false
 	}
-	if importDecl.Path[:prefixLen] != ctx.GoModRoot {
-		return "", false
-	}
-	pathSuffix := importDecl.Path[prefixLen:]
-	pathSuffix = strings.TrimPrefix(pathSuffix, "/")
-
-	searchTarget := ctx.ProjectRoot
-	if pathSuffix != "" {
-		searchTarget = filepath.Join(searchTarget, pathSuffix)
-	}
-	for filename, declarations := range ctx.Declarations {
-		if !strings.HasPrefix(filename, searchTarget) {
-			continue
-		}
-		if declarations.Symbols.Contains(selector.Sel.Name) {
-			return astutil.Qualify(filename, selector.Sel.Name), true
-		}
-	}
-	return "", false
+	decl, ok := moduleDecls[selector.Sel.Name]
+	return decl, ok
 }
 
-func findImportDecl(imports set.Set[declarations.ImportDeclaration], selectorName string) (*declarations.ImportDeclaration, bool) {
+func findImportDecl(imports set.Set[declarations.Import], selectorName string) (*declarations.Import, bool) {
 	for importDecl := range imports {
 		if selectorName == importDecl.Name {
 			return &importDecl, true
