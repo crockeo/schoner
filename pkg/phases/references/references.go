@@ -79,26 +79,18 @@ func FindReferences(
 			from.Name = container
 		}
 
-		if node, ok := node.(*ast.Ident); ok {
-			if _, ok := ourDeclarationsByName[node.Name]; !ok {
-				return nil
+		switch node := node.(type) {
+		case *ast.Ident:
+			reference, ok := findIdentReference(ourDeclarationsByName, node)
+			if ok {
+				references.Add(from, reference)
 			}
-			references.Add(from, declarations.Declaration{
-				Filename: filename,
-				Name:     node.Name,
-			})
-			return nil
+		case *ast.SelectorExpr:
+			reference, ok := findSelectorReference(ctx, ourDeclarations, node)
+			if ok {
+				references.Add(from, reference)
+			}
 		}
-
-		selector, ok := node.(*ast.SelectorExpr)
-		if !ok {
-			return nil
-		}
-		selectorTarget, ok := findSelectorTarget(ctx, ourDeclarations, selector)
-		if !ok {
-			return nil
-		}
-		references.Add(from, selectorTarget)
 		return nil
 	})
 	if err != nil {
@@ -108,7 +100,16 @@ func FindReferences(
 	return references, nil
 }
 
-func findSelectorTarget(
+func findIdentReference(ourDeclarationsByName map[string]declarations.Declaration, ident *ast.Ident) (declarations.Declaration, bool) {
+	// TODO: this is broken!!!
+	// you can also reference functions which are contained in the same package.
+	// aka we need to search every declaration in DeclarationLookup
+	// which shares the same package as us
+	decl, ok := ourDeclarationsByName[ident.Name]
+	return decl, ok
+}
+
+func findSelectorReference(
 	ctx *ReferencesContext,
 	ourDeclarations *declarations.Declarations,
 	selector *ast.SelectorExpr,

@@ -1,6 +1,7 @@
 package declarations
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -40,7 +41,6 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 		return nil, err
 	}
 
-	// TODO: this could probably be simplified by just looping through fileAst.Decls
 	declarations := &Declarations{
 		Declarations: set.NewSet[Declaration](),
 		Imports:      set.NewSet[Import](),
@@ -48,7 +48,9 @@ func FindDeclarations(context struct{}, fileset *token.FileSet, filename string,
 	for _, decl := range fileAst.Decls {
 		if decl, ok := decl.(*ast.FuncDecl); ok {
 			funcName, err := astutil.FunctionName(decl)
-			if err != nil {
+			if errors.Is(err, astutil.ErrUnsupportedNode) {
+				continue
+			} else if err != nil {
 				return nil, err
 			}
 			declarations.Declarations.Add(Declaration{

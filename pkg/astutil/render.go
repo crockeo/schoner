@@ -1,10 +1,13 @@
 package astutil
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"strings"
 )
+
+var ErrUnsupportedNode = errors.New("unsupported node type")
 
 func Qualify(names ...string) string {
 	return strings.Join(names, "::")
@@ -26,11 +29,14 @@ func ExprName(expr ast.Expr) (string, bool) {
 func FunctionName(fn *ast.FuncDecl) (string, error) {
 	funcName := fn.Name.Name
 	if fn.Recv != nil {
-		recvName, ok := ExprName(fn.Recv.List[0].Type)
-		if !ok {
-			return "", fmt.Errorf("failed to get receiver name for %s", fn.Name.Name)
-		}
-		funcName = Qualify(recvName, funcName)
+		// TODO: support rendering functions with receivers
+		// when we can discover references to instance methods
+		return "", fmt.Errorf("functions with receivers unsupported: %w", ErrUnsupportedNode)
+		// recvName, ok := ExprName(fn.Recv.List[0].Type)
+		// if !ok {
+		// 	return "", fmt.Errorf("failed to get receiver name for %s", fn.Name.Name)
+		// }
+		// funcName = Qualify(recvName, funcName)
 	}
 	return funcName, nil
 }
@@ -40,7 +46,7 @@ func RenderDecl(decl ast.Decl) (string, error) {
 	case *ast.GenDecl:
 		return renderGenDecl(decl)
 	case *ast.FuncDecl:
-		return renderFuncDecl(decl)
+		return FunctionName(decl)
 	default:
 		return "", fmt.Errorf("unknown declaration type: %T", decl)
 	}
@@ -58,16 +64,4 @@ func renderGenDecl(decl *ast.GenDecl) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown GenDecl type: %T", decl)
 	}
-}
-
-func renderFuncDecl(decl *ast.FuncDecl) (string, error) {
-	funcName := decl.Name.Name
-	if decl.Recv != nil {
-		recvName, ok := ExprName(decl.Recv.List[0].Type)
-		if !ok {
-			return "", fmt.Errorf("failed to get receiver name for %s", decl.Name.Name)
-		}
-		funcName = Qualify(recvName, funcName)
-	}
-	return funcName, nil
 }
