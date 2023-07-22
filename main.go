@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/crockeo/schoner/pkg/graph"
 	"github.com/crockeo/schoner/pkg/phases"
 	"github.com/crockeo/schoner/pkg/phases/declarations"
 	"github.com/crockeo/schoner/pkg/phases/references"
-	"github.com/crockeo/schoner/pkg/set"
 	"github.com/crockeo/schoner/pkg/visualize"
 )
 
@@ -39,18 +39,18 @@ func mainImpl() error {
 		// renderDecls(decls)
 		// renderRefs(refs)
 
-		flattenedReferences := map[declarations.Declaration]set.Set[declarations.Declaration]{}
+		referenceGraph := graph.NewGraph[declarations.Declaration]()
 		for _, fileRefs := range refs {
 			for decl, targets := range fileRefs.References {
-				if _, ok := flattenedReferences[decl]; !ok {
-					flattenedReferences[decl] = set.NewSet[declarations.Declaration]()
+				for target := range targets {
+					referenceGraph.AddEdge(decl, target)
 				}
-				flattenedReferences[decl].UnionInPlace(targets)
 			}
 		}
+
 		if err := visualize.Visualize(
 			fmt.Sprintf("%s.svg", filepath.Base(root)),
-			flattenedReferences,
+			referenceGraph,
 		); err != nil {
 			return err
 		}

@@ -3,13 +3,13 @@ package visualize
 import (
 	"fmt"
 
+	"github.com/crockeo/schoner/pkg/graph"
 	"github.com/crockeo/schoner/pkg/phases/declarations"
-	"github.com/crockeo/schoner/pkg/set"
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 )
 
-func Visualize(outputPath string, graph map[declarations.Declaration]set.Set[declarations.Declaration]) error {
+func Visualize(outputPath string, graph graph.Graph[declarations.Declaration]) error {
 	gviz := graphviz.New()
 	rootGraph, err := gviz.Graph(graphviz.Directed)
 	if err != nil {
