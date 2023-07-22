@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"strings"
 
 	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/phases/declarations"
@@ -54,10 +55,11 @@ func FindReferences(
 	if !ok {
 		return nil, fmt.Errorf("no declarations for file %s", filename)
 	}
-	ourDeclarationsByName := map[string]declarations.Declaration{}
-	for decl := range ourDeclarations.Declarations {
-		ourDeclarationsByName[decl.Name] = decl
+	ourPackage, err := findPackagePath(ctx.ProjectRoot, ctx.GoModRoot, filename)
+	if err != nil {
+		return nil, err
 	}
+	ourDeclarationsByName := ctx.DeclarationLookup[ourPackage]
 
 	fileAst, err := parser.ParseFile(fileset, filename, contents, 0)
 	if err != nil {
@@ -101,10 +103,6 @@ func FindReferences(
 }
 
 func findIdentReference(ourDeclarationsByName map[string]declarations.Declaration, ident *ast.Ident) (declarations.Declaration, bool) {
-	// TODO: this is broken!!!
-	// you can also reference functions which are contained in the same package.
-	// aka we need to search every declaration in DeclarationLookup
-	// which shares the same package as us
 	decl, ok := ourDeclarationsByName[ident.Name]
 	return decl, ok
 }
@@ -144,4 +142,18 @@ func findImportDecl(imports set.Set[declarations.Import], selectorName string) (
 		}
 	}
 	return nil, false
+}
+
+func findPackagePath(projectRoot string, goModRoot string, filename string) (string, error) {
+	if !strings.HasPrefix(filename, projectRoot) {
+		return "", fmt.Errorf("filename %s is not in root %s", filename, projectRoot)
+	}
+	filename = filename[len(projectRoot):]
+	filename = strings.TrimSuffix(filename, "/")
+
+	if filename == "" {
+		return goModRoot, nil
+	}
+	filename = filepath.Dir(filename)
+	return filepath.Join(goModRoot, filename), nil
 }

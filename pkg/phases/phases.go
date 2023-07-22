@@ -62,7 +62,7 @@ func WalkFiles[Context any, Result any](
 			return nil
 		}
 
-		if filepath.Ext(path) != ".go" {
+		if strings.HasSuffix(path, "_test.go") || filepath.Ext(path) != ".go" {
 			return nil
 		}
 

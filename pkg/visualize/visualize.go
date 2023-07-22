@@ -67,7 +67,7 @@ func registerDecl(
 
 	nodeName := decl.Name
 	if nodeName == "" {
-		nodeName = "root"
+		nodeName = decl.Filename
 	}
 	if _, ok := nodes[decl.QualifiedName()]; !ok {
 		subgraph := subgraphs[decl.Filename]
@@ -79,6 +79,7 @@ func registerDecl(
 			return fmt.Errorf("unexpected nil node for %s", decl.QualifiedName())
 		}
 		node.SetLabel(nodeName)
+		node.SetGroup(decl.Filename)
 		nodes[decl.QualifiedName()] = node
 	}
 
