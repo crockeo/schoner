@@ -58,6 +58,7 @@ func BuildReferenceGraph(
 }
 
 type referenceGraphBuilder struct {
+	FileInfos         map[string]*fileinfo.FileInfo
 	ReferenceGraph    graph.Graph[Declaration]
 	RootModule        string
 	DeclarationLookup map[string]map[string]Declaration
@@ -77,6 +78,7 @@ func newReferenceGraphBuilder(root string, fileInfos map[string]*fileinfo.FileIn
 		return nil, fmt.Errorf("failed to create declaration lookup: %w", err)
 	}
 	return &referenceGraphBuilder{
+		FileInfos:         fileInfos,
 		ReferenceGraph:    graph.NewGraph[Declaration](),
 		RootModule:        modulePath,
 		DeclarationLookup: declarationLookup,
@@ -126,13 +128,26 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 }
 
 func (rgb *referenceGraphBuilder) identReference(currentFileInfo *fileinfo.FileInfo, ident *ast.Ident) (Declaration, bool) {
-	if !currentFileInfo.Declarations.Contains(ident.Name) {
-		return Declaration{}, false
+	if currentFileInfo.Declarations.Contains(ident.Name) {
+		return Declaration{
+			Parent: currentFileInfo,
+			Name:   ident.Name,
+		}, true
 	}
-	return Declaration{
-		Parent: currentFileInfo,
-		Name: ident.Name,
-	}, true
+
+	for _, fileInfo := range rgb.FileInfos {
+		if fileInfo.Package != currentFileInfo.Package {
+			continue
+		}
+		if fileInfo.Declarations.Contains(ident.Name) {
+			return Declaration{
+				Parent: fileInfo,
+				Name:   ident.Name,
+			}, true
+		}
+	}
+
+	return Declaration{}, false
 }
 
 func (rgb *referenceGraphBuilder) selectorReference(currentFileInfo *fileinfo.FileInfo, selector *ast.SelectorExpr) (Declaration, bool) {
