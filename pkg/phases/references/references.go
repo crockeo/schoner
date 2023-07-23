@@ -101,14 +101,12 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 		}
 		defer func() { path = append(path, node) }()
 
-		from := Declaration{
-			Parent: fileInfo,
-			Name:   "root",
-		}
+		from := Declaration{Parent: fileInfo}
 		container, err := astutil.OuterDeclName(path)
-		if err == nil {
-			from.Name = container
+		if err != nil {
+			return nil
 		}
+		from.Name = container
 		if astutil.IsQualified(from.Name) {
 			parts := astutil.Unqualify(from.Name)
 			from.Name = parts[0]
