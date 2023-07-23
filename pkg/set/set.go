@@ -2,8 +2,12 @@ package set
 
 type Set[T comparable] map[T]struct{}
 
-func NewSet[T comparable]() Set[T] {
-	return make(map[T]struct{})
+func NewSet[T comparable](elements ...T) Set[T] {
+	set := Set[T](make(map[T]struct{}))
+	for _, element := range elements {
+		set.Add(element)
+	}
+	return set
 }
 
 func (s Set[T]) Add(v T) bool {
