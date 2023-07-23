@@ -135,6 +135,8 @@ func (rgb *referenceGraphBuilder) identReference(currentFileInfo *fileinfo.FileI
 		}, true
 	}
 
+	// TODO: if we had access to the current package import path we could skip this loop
+	// and use DeclarationLookup instead.
 	for _, fileInfo := range rgb.FileInfos {
 		if fileInfo.Package != currentFileInfo.Package {
 			continue
