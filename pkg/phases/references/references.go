@@ -100,6 +100,10 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 		if err == nil {
 			from.Name = container
 		}
+		if astutil.IsQualified(from.Name) {
+			parts := astutil.Unqualify(from.Name)
+			from.Name = parts[0]
+		}
 
 		switch node := node.(type) {
 		case *ast.Ident:

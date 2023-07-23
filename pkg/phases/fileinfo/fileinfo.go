@@ -74,7 +74,9 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			fileInfo.Declarations.Add(name)
+			if !astutil.IsQualified(name) {
+				fileInfo.Declarations.Add(name)
+			}
 
 		case *ast.GenDecl:
 			for _, spec := range decl.Specs {

@@ -13,6 +13,14 @@ func Qualify(names ...string) string {
 	return strings.Join(names, "::")
 }
 
+func Unqualify(name string) []string {
+	return strings.Split(name, "::")
+}
+
+func IsQualified(name string) bool {
+	return strings.Contains(name, "::")
+}
+
 func ExprName(expr ast.Expr) (string, bool) {
 	switch expr := expr.(type) {
 	case *ast.Ident:
