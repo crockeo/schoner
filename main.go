@@ -7,6 +7,7 @@ import (
 
 	"github.com/crockeo/schoner/pkg/phases/fileinfo"
 	"github.com/crockeo/schoner/pkg/phases/references"
+	"github.com/crockeo/schoner/pkg/visualize"
 	"github.com/crockeo/schoner/pkg/walk"
 )
 
@@ -35,7 +36,9 @@ func mainImpl() error {
 			return err
 		}
 
-		_ = referenceGraph
+		if err := visualize.Visualize(fmt.Sprintf("%s.svg", filepath.Base(root)), referenceGraph); err != nil {
+			return err
+		}
 	}
 
 	return nil

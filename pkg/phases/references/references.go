@@ -104,12 +104,12 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 		switch node := node.(type) {
 		case *ast.Ident:
 			target, ok := rgb.identReference(fileInfo, node)
-			if ok {
+			if ok && from != target {
 				rgb.ReferenceGraph.AddEdge(from, target)
 			}
 		case *ast.SelectorExpr:
 			target, ok := rgb.selectorReference(fileInfo, node)
-			if ok {
+			if ok && from != target {
 				rgb.ReferenceGraph.AddEdge(from, target)
 			}
 		}
