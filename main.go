@@ -7,6 +7,7 @@ import (
 
 	"github.com/crockeo/schoner/pkg/phases/fileinfo"
 	"github.com/crockeo/schoner/pkg/phases/references"
+	"github.com/crockeo/schoner/pkg/set"
 	"github.com/crockeo/schoner/pkg/visualize"
 	"github.com/crockeo/schoner/pkg/walk"
 )
@@ -36,7 +37,25 @@ func mainImpl() error {
 			return err
 		}
 
-		if err := visualize.Visualize(fmt.Sprintf("%s.svg", filepath.Base(root)), referenceGraph); err != nil {
+		unreachable := set.NewSet[references.Declaration]()
+		entrypoints := set.NewSet[references.Declaration]()
+		for decl := range referenceGraph {
+			unreachable.Add(decl)
+			if decl.Parent.Entrypoints.Contains(decl.Name) {
+				entrypoints.Add(decl)
+			}
+		}
+		_ = referenceGraph.DFS(entrypoints.ToSlice(), func(node references.Declaration) error {
+			unreachable.Remove(node)
+			return nil
+		})
+
+		if err := visualize.Visualize(
+			fmt.Sprintf("%s.svg", filepath.Base(root)),
+			referenceGraph,
+			entrypoints,
+			unreachable,
+		); err != nil {
 			return err
 		}
 	}

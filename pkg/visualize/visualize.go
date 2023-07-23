@@ -3,11 +3,17 @@ package visualize
 import (
 	"github.com/crockeo/schoner/pkg/graph"
 	"github.com/crockeo/schoner/pkg/phases/references"
+	"github.com/crockeo/schoner/pkg/set"
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
 )
 
-func Visualize(outputPath string, graph graph.Graph[references.Declaration]) error {
+func Visualize(
+	outputPath string,
+	graph graph.Graph[references.Declaration],
+	entrypoints set.Set[references.Declaration],
+	unreachable set.Set[references.Declaration],
+) error {
 	gviz := graphviz.New()
 	g, err := gviz.Graph(graphviz.Directed)
 	if err != nil {
@@ -17,6 +23,13 @@ func Visualize(outputPath string, graph graph.Graph[references.Declaration]) err
 	nodes := map[references.Declaration]*cgraph.Node{}
 	for decl := range graph {
 		node, err := g.CreateNode(decl.Name)
+		if entrypoints.Contains(decl) {
+			node.SetStyle(cgraph.FilledNodeStyle)
+			node.SetFillColor("chartreuse")
+		} else if unreachable.Contains(decl) {
+			node.SetStyle(cgraph.FilledNodeStyle)
+			node.SetFillColor("gray")
+		}
 		if err != nil {
 			return err
 		}
