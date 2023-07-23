@@ -9,63 +9,19 @@ import (
 
 	"github.com/crockeo/schoner/pkg/phases/declarations"
 	"github.com/crockeo/schoner/pkg/phases/references"
-	"github.com/crockeo/schoner/pkg/set"
+	"github.com/crockeo/schoner/pkg/walk"
 	"golang.org/x/mod/modfile"
 )
-
-type walkFilesOptions struct {
-	ignoreDirs set.Set[string]
-}
-
-type Option func(*walkFilesOptions)
-
-func WithIgnoreDirs(dirs ...string) func(*walkFilesOptions) {
-	return func(wfo *walkFilesOptions) {
-		for _, dir := range dirs {
-			wfo.ignoreDirs.Add(dir)
-		}
-	}
-}
 
 func WalkFiles[Context any, Result any](
 	ctx Context,
 	root string,
+	option walk.Option,
 	visitor func(ctx Context, fileset *token.FileSet, filename string, contents []byte) (Result, error),
-	options ...Option,
 ) (map[string]Result, error) {
-	realizedOptions := walkFilesOptions{
-		ignoreDirs: set.NewSet[string](),
-	}
-	for _, option := range options {
-		option(&realizedOptions)
-	}
-
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	if !filepath.IsAbs(root) {
-		root = filepath.Join(wd, root)
-	}
-
 	fileset := token.NewFileSet()
 	results := map[string]Result{}
-	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			if realizedOptions.ignoreDirs.Contains(filepath.Base(path)) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		if strings.HasSuffix(path, "_test.go") || filepath.Ext(path) != ".go" {
-			return nil
-		}
-
+	err := walk.GoFiles(root, option, func(path string) error {
 		contents, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -76,22 +32,23 @@ func WalkFiles[Context any, Result any](
 		}
 		results[path] = result
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
 	return results, nil
 }
 
-func FindDeclarations(root string, options ...Option) (map[string]*declarations.Declarations, error) {
+func FindDeclarations(root string, option walk.Option) (map[string]*declarations.Declarations, error) {
 	return WalkFiles(
 		struct{}{},
 		root,
+		option,
 		declarations.FindDeclarations,
-		options...,
 	)
 }
 
-func FindReferences(root string, decls map[string]*declarations.Declarations, options ...Option) (map[string]*references.References, error) {
+func FindReferences(root string, decls map[string]*declarations.Declarations, option walk.Option) (map[string]*references.References, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("failed to normalize the root")
@@ -118,8 +75,8 @@ func FindReferences(root string, decls map[string]*declarations.Declarations, op
 	return WalkFiles(
 		ctx,
 		root,
+		option,
 		references.FindReferences,
-		options...,
 	)
 }
 
