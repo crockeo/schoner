@@ -29,14 +29,11 @@ func ExprName(expr ast.Expr) (string, bool) {
 func FunctionName(fn *ast.FuncDecl) (string, error) {
 	funcName := fn.Name.Name
 	if fn.Recv != nil {
-		// TODO: support rendering functions with receivers
-		// when we can discover references to instance methods
-		return "", fmt.Errorf("functions with receivers unsupported: %w", ErrUnsupportedNode)
-		// recvName, ok := ExprName(fn.Recv.List[0].Type)
-		// if !ok {
-		// 	return "", fmt.Errorf("failed to get receiver name for %s", fn.Name.Name)
-		// }
-		// funcName = Qualify(recvName, funcName)
+		recvName, ok := ExprName(fn.Recv.List[0].Type)
+		if !ok {
+			return "", fmt.Errorf("failed to get receiver name for %s", fn.Name.Name)
+		}
+		funcName = Qualify(recvName, funcName)
 	}
 	return funcName, nil
 }
