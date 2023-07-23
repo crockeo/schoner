@@ -20,7 +20,10 @@ func main() {
 }
 
 func mainImpl() error {
-	walkOptions := walk.WithIgnoreDirs(".git")
+	walkOptions := walk.WithOptions(
+		walk.WithIgnoreDirs(".git"),
+		walk.WithIgnoreTests(true),
+	)
 	for _, root := range os.Args[1:] {
 		root, err := filepath.Abs(root)
 		if err != nil {

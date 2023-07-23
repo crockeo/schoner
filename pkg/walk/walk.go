@@ -3,12 +3,14 @@ package walk
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/crockeo/schoner/pkg/set"
 )
 
 type walkFilesOptions struct {
-	ignoreDirs set.Set[string]
+	ignoreDirs  set.Set[string]
+	ignoreTests bool
 }
 
 type Option func(*walkFilesOptions)
@@ -18,6 +20,12 @@ func WithIgnoreDirs(dirs ...string) Option {
 		for _, dir := range dirs {
 			wfo.ignoreDirs.Add(dir)
 		}
+	}
+}
+
+func WithIgnoreTests(ignoreTests bool) Option {
+	return func(wfo *walkFilesOptions) {
+		wfo.ignoreTests = ignoreTests
 	}
 }
 
@@ -53,6 +61,9 @@ func GoFiles(root string, option Option, visitor func(path string) error) error 
 		}
 
 		if filepath.Ext(path) != ".go" {
+			return nil
+		}
+		if options.ignoreTests && strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		return visitor(path)
