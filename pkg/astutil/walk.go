@@ -1,9 +1,12 @@
 package astutil
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 )
+
+var ErrAmbiguousOuterDecl = errors.New("ambiguous outer declaration name")
 
 func Walk(node ast.Node, fn func(ast.Node) error) error {
 	var err error
@@ -19,11 +22,15 @@ func Walk(node ast.Node, fn func(ast.Node) error) error {
 
 func OuterDeclName(path []ast.Node) (string, error) {
 	for _, node := range path {
-		decl, ok := node.(ast.Decl)
-		if !ok {
-			continue
+		switch node := node.(type) {
+		case *ast.FuncDecl:
+			return FunctionName(node)
+		case *ast.ValueSpec:
+			if len(node.Names) != 1 {
+				return "", fmt.Errorf("ValueSpec contains more than 1 name: %w", ErrAmbiguousOuterDecl)
+			}
+			return node.Names[0].Name, nil
 		}
-		return RenderDecl(decl)
 	}
-	return "", fmt.Errorf("no containing declaration")
+	return "", fmt.Errorf("no decl")
 }
