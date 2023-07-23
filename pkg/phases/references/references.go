@@ -86,6 +86,13 @@ func newReferenceGraphBuilder(root string, fileInfos map[string]*fileinfo.FileIn
 }
 
 func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.FileInfo, fileAst *ast.File) error {
+	for decl := range fileInfo.Declarations {
+		rgb.ReferenceGraph.AddNode(Declaration{
+			Parent: fileInfo,
+			Name:   decl,
+		})
+	}
+
 	path := []ast.Node{}
 	err := astutil.Walk(fileAst, func(node ast.Node) error {
 		if node == nil {
