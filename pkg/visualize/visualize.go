@@ -1,6 +1,7 @@
 package visualize
 
 import (
+	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/graph"
 	"github.com/crockeo/schoner/pkg/phases/references"
 	"github.com/crockeo/schoner/pkg/set"
@@ -22,7 +23,8 @@ func Visualize(
 
 	nodes := map[references.Declaration]*cgraph.Node{}
 	for decl := range graph {
-		node, err := g.CreateNode(decl.Name)
+		node, err := g.CreateNode(astutil.Qualify(decl.Parent.Filename, decl.Name))
+		node.SetLabel(decl.Name)
 		if entrypoints.Contains(decl) {
 			node.SetStyle(cgraph.FilledNodeStyle)
 			node.SetFillColor("chartreuse")

@@ -107,10 +107,7 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 
 	// TODO: populate entrypoints for tests
 	// Entrypoints  set.Set[string]
-	if fileInfo.Package == "main" {
-		if !fileInfo.Declarations.Contains("main") {
-			return nil, ErrMissingMain
-		}
+	if fileInfo.Package == "main" && fileInfo.Declarations.Contains("main") {
 		fileInfo.Entrypoints.Add("main")
 	}
 
