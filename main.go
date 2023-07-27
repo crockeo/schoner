@@ -20,7 +20,8 @@ import (
 
 func main() {
 	if err := mainImpl(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		errMsg := strings.TrimSpace(err.Error())
+		fmt.Fprintln(os.Stderr, errMsg)
 		os.Exit(1)
 	}
 }
@@ -135,5 +136,15 @@ func cmdUnreachable(root string, unreachable set.Set[references.Declaration]) er
 }
 
 func printHelp(extraMessage string) error {
-	return errors.New(extraMessage)
+	builder := strings.Builder{}
+
+	if extraMessage != "" {
+		fmt.Fprintln(&builder, "Error:", extraMessage)
+	}
+	fmt.Fprintln(&builder, "Usage:")
+	fmt.Fprintln(&builder, "  schoner <visualize|unreachable>")
+	fmt.Fprintln(&builder, "    visualize   -- Prints a .svg of the call graph of a project.")
+	fmt.Fprintln(&builder, "    unreachable -- Prints all unreachable declarations in a project.")
+
+	return errors.New(builder.String())
 }
