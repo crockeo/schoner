@@ -11,3 +11,8 @@ func (s *String[T]) Asdf() {}
 func (s *String[T]) Asdf2() {
 	fmt.Println(Something)
 }
+
+type PlainStruct struct {}
+type ArrayOfPlainStruct struct {
+	Elements []PlainStruct
+}

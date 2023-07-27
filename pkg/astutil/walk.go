@@ -25,6 +25,8 @@ func OuterDeclName(path []ast.Node) (string, error) {
 		switch node := node.(type) {
 		case *ast.FuncDecl:
 			return FunctionName(node)
+		case *ast.TypeSpec:
+			return node.Name.Name, nil
 		case *ast.ValueSpec:
 			if len(node.Names) != 1 {
 				return "", fmt.Errorf("ValueSpec contains more than 1 name: %w", ErrAmbiguousOuterDecl)
