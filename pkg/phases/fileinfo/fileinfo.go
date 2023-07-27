@@ -104,6 +104,13 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 					fileInfo.Declarations.Add(spec.Name.Name)
 				case *ast.ValueSpec:
 					for _, name := range spec.Names {
+						if name.Name == "_" {
+							// TODO: unify this and the other branch in references.go
+							// Typically values named `_` are intentionally unused,
+							// and are used to assert that structs abide by interfaces.
+							continue
+						}
+
 						fileInfo.Declarations.Add(name.Name)
 					}
 				}

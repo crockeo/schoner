@@ -111,6 +111,12 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 			parts := astutil.Unqualify(from.Name)
 			from.Name = parts[0]
 		}
+		if from.Name == "_" {
+			// TODO: unify this and the other branch in fileinfo.go
+			// Typically values named `_` are intentionally unused,
+			// and are used to assert that structs abide by interfaces.
+			return nil
+		}
 
 		switch node := node.(type) {
 		case *ast.Ident:
