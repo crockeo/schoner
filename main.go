@@ -54,7 +54,7 @@ func mainImpl() error {
 
 	walkOptions := walk.WithOptions(
 		walk.WithIgnoreDirs(".git"),
-		walk.WithIgnoreTests(true),
+		// walk.WithIgnoreTests(true),
 	)
 	for _, root := range roots {
 		root, err := filepath.Abs(root)
@@ -87,7 +87,7 @@ func mainImpl() error {
 
 		switch command {
 		case CommandVisualize:
-			if err := cmdVisualize(root, referenceGraph, entrypoints, unreachable); err != nil {
+			if err := cmdVisualize(root, referenceGraph, unreachable, entrypoints); err != nil {
 				return err
 			}
 		case CommandUnreachable:

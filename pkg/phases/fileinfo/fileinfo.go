@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/set"
@@ -74,8 +75,13 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			if !astutil.IsQualified(name) {
-				fileInfo.Declarations.Add(name)
+			if astutil.IsQualified(name) {
+				continue
+			}
+			fileInfo.Declarations.Add(name)
+			isMainFunc := fileInfo.Package == "main" && name == "main"
+			if isMainFunc || isTestFuncDecl(decl) {
+				fileInfo.Entrypoints.Add(name)
 			}
 
 		case *ast.GenDecl:
@@ -105,11 +111,23 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 		}
 	}
 
-	// TODO: populate entrypoints for tests
-	// Entrypoints  set.Set[string]
-	if fileInfo.Package == "main" && fileInfo.Declarations.Contains("main") {
-		fileInfo.Entrypoints.Add("main")
+	return fileInfo, nil
+}
+
+func isTestFuncDecl(decl *ast.FuncDecl) bool {
+	name := decl.Name.Name
+	if !strings.HasPrefix(name, "Test") {
+		return false
+	}
+	name = name[len("Test"):]
+
+	var firstChar rune
+	for _, firstChar = range name {
+		break
+	}
+	if !unicode.IsUpper(firstChar) {
+		return false
 	}
 
-	return fileInfo, nil
+	return true
 }
