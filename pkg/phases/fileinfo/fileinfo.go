@@ -17,7 +17,6 @@ import (
 )
 
 var (
-	ErrMissingMain         = errors.New("main package, but does not contain main")
 	ErrImportPathNotString = errors.New("import path is not a string")
 )
 
