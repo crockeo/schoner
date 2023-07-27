@@ -78,8 +78,9 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 				continue
 			}
 			fileInfo.Declarations.Add(name)
+			isInitFunc := name == "init"
 			isMainFunc := fileInfo.Package == "main" && name == "main"
-			if isMainFunc || isTestFuncDecl(decl) {
+			if isInitFunc || isMainFunc || isTestFuncDecl(decl) {
 				fileInfo.Entrypoints.Add(name)
 			}
 
