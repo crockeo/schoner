@@ -60,6 +60,7 @@ func BuildReferenceGraph(
 type referenceGraphBuilder struct {
 	FileInfos         map[string]*fileinfo.FileInfo
 	ReferenceGraph    graph.Graph[Declaration]
+	Root              string
 	RootModule        string
 	DeclarationLookup map[string]map[string]Declaration
 }
@@ -80,6 +81,7 @@ func newReferenceGraphBuilder(root string, fileInfos map[string]*fileinfo.FileIn
 	return &referenceGraphBuilder{
 		FileInfos:         fileInfos,
 		ReferenceGraph:    graph.NewGraph[Declaration](),
+		Root:              root,
 		RootModule:        modulePath,
 		DeclarationLookup: declarationLookup,
 	}, nil
@@ -93,7 +95,12 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 		})
 	}
 
-	err := astutil.Walk(fileAst, func(path []ast.Node, node ast.Node) error {
+	ourModule, err := fileInfoModule(fileInfo, rgb.Root, rgb.RootModule)
+	if err != nil {
+		return fmt.Errorf("failed to determine current module: %w", err)
+	}
+
+	err = astutil.Walk(fileAst, func(path []ast.Node, node ast.Node) error {
 		container, err := astutil.OuterDeclName(path)
 		if err != nil {
 			return nil
@@ -102,7 +109,7 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 			parts := astutil.Unqualify(container)
 			container = parts[0]
 		}
-		from, ok := rgb.identReference(fileInfo, container)
+		from, ok := rgb.identReference(ourModule, container)
 		if !ok {
 			return nil
 		}
@@ -121,7 +128,7 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 
 		switch node := node.(type) {
 		case *ast.Ident:
-			target, ok := rgb.identReference(fileInfo, node.Name)
+			target, ok := rgb.identReference(ourModule, node.Name)
 			if ok && from != target {
 				rgb.ReferenceGraph.AddEdge(from, target)
 			}
@@ -139,29 +146,13 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 	return nil
 }
 
-func (rgb *referenceGraphBuilder) identReference(currentFileInfo *fileinfo.FileInfo, name string) (Declaration, bool) {
-	if currentFileInfo.Declarations.Contains(name) {
-		return Declaration{
-			Parent: currentFileInfo,
-			Name:   name,
-		}, true
+func (rgb *referenceGraphBuilder) identReference(ourModule string, name string) (Declaration, bool) {
+	declarations, ok := rgb.DeclarationLookup[ourModule]
+	if !ok {
+		return Declaration{}, false
 	}
-
-	// TODO: if we had access to the current package import path we could skip this loop
-	// and use DeclarationLookup instead.
-	for _, fileInfo := range rgb.FileInfos {
-		if fileInfo.Package != currentFileInfo.Package {
-			continue
-		}
-		if fileInfo.Declarations.Contains(name) {
-			return Declaration{
-				Parent: fileInfo,
-				Name:   name,
-			}, true
-		}
-	}
-
-	return Declaration{}, false
+	declaration, ok := declarations[name]
+	return declaration, ok
 }
 
 func (rgb *referenceGraphBuilder) selectorReference(currentFileInfo *fileinfo.FileInfo, selector *ast.SelectorExpr) (Declaration, bool) {
@@ -198,16 +189,10 @@ func makeDeclarationLookup(
 ) (map[string]map[string]Declaration, error) {
 	// module -> symbol -> declaration
 	declarationLookup := map[string]map[string]Declaration{}
-	for filename, fileInfo := range fileInfos {
-		if !strings.HasPrefix(filename, root) {
-			return nil, fmt.Errorf("file %s does not start with root %s", filename, root)
-		}
-		suffix := filename[len(root):]
-		suffix = strings.TrimPrefix(suffix, "/")
-
-		module := rootModule
-		if suffix != "" {
-			module = filepath.Join(module, filepath.Dir(suffix))
+	for _, fileInfo := range fileInfos {
+		module, err := fileInfoModule(fileInfo, root, rootModule)
+		if err != nil {
+			return nil, err
 		}
 
 		if _, ok := declarationLookup[module]; !ok {
@@ -222,4 +207,19 @@ func makeDeclarationLookup(
 		}
 	}
 	return declarationLookup, nil
+}
+
+func fileInfoModule(fileInfo *fileinfo.FileInfo, root string, rootModule string) (string, error) {
+	if !strings.HasPrefix(fileInfo.Filename, root) {
+		return "", fmt.Errorf("file %s does not start with root %s", fileInfo.Filename, root)
+	}
+	suffix := fileInfo.Filename[len(root):]
+	suffix = strings.TrimPrefix(suffix, "/")
+
+	module := rootModule
+	if suffix != "" {
+		module = filepath.Join(module, filepath.Dir(suffix))
+	}
+
+	return module, nil
 }
