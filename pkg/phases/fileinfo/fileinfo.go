@@ -81,9 +81,6 @@ func parseFileInfo(fileset *token.FileSet, filename string, fileAst *ast.File) (
 			if err != nil {
 				return nil, err
 			}
-			if astutil.IsQualified(name) {
-				continue
-			}
 			fileInfo.Declarations[name] = Declaration{
 				Parent: fileInfo,
 				Name:   name,
