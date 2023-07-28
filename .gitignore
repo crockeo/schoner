@@ -1,2 +1,5 @@
 # produced by schoner in visualization mode
 *.svg
+
+# produced by go build
+/schoner
