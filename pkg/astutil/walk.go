@@ -8,13 +8,19 @@ import (
 
 var ErrAmbiguousOuterDecl = errors.New("ambiguous outer declaration name")
 
-func Walk(node ast.Node, fn func(ast.Node) error) error {
+func Walk(fileAst *ast.File, fn func([]ast.Node, ast.Node) error) error {
+	path := []ast.Node{}
 	var err error
-	ast.Inspect(node, func(node ast.Node) bool {
+	ast.Inspect(fileAst, func(node ast.Node) bool {
 		if err != nil {
 			return false
 		}
-		err = fn(node)
+		if node == nil {
+			path = path[:len(path)-1]
+			return true
+		}
+		defer func() { path = append(path, node) }()
+		err = fn(path, node)
 		return true
 	})
 	return err

@@ -93,14 +93,7 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 		})
 	}
 
-	path := []ast.Node{}
-	err := astutil.Walk(fileAst, func(node ast.Node) error {
-		if node == nil {
-			path = path[:len(path)-1]
-			return nil
-		}
-		defer func() { path = append(path, node) }()
-
+	err := astutil.Walk(fileAst, func(path []ast.Node, node ast.Node) error {
 		from := Declaration{Parent: fileInfo}
 		container, err := astutil.OuterDeclName(path)
 		if err != nil {
