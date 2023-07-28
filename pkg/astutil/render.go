@@ -15,7 +15,7 @@ func Unqualify(name string) []string {
 }
 
 func IsQualified(name string) bool {
-	return strings.Contains(name, "::")
+	return len(Unqualify(name)) > 1
 }
 
 func ExprName(expr ast.Expr) (string, bool) {
