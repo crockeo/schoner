@@ -93,6 +93,28 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 	}
 
 	err = astutil.Walk(fileAst, func(path []ast.Node, node ast.Node) error {
+		// TODO: where to put this? definitely not here!
+		if node, ok := node.(*ast.FuncDecl); ok {
+			name, err := astutil.FunctionName(node)
+			if err != nil {
+				return err
+			}
+			if !astutil.IsQualified(name) {
+				return nil
+			}
+			container := astutil.Unqualify(name)[0]
+
+			from, ok := rgb.identReference(ourModule, container)
+			if !ok {
+				return nil
+			}
+			to, ok := rgb.identReference(ourModule, name)
+			if !ok {
+				return nil
+			}
+			rgb.ReferenceGraph.AddEdge(from, to)
+		}
+
 		container, err := astutil.OuterDeclName(path)
 		if err != nil {
 			return nil
