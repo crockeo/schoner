@@ -94,11 +94,19 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 	}
 
 	err := astutil.Walk(fileAst, func(path []ast.Node, node ast.Node) error {
-		from := Declaration{Parent: fileInfo}
 		container, err := astutil.OuterDeclName(path)
 		if err != nil {
 			return nil
 		}
+		if astutil.IsQualified(container) {
+			parts := astutil.Unqualify(container)
+			container = parts[0]
+		}
+		from, ok := rgb.identReference(fileInfo, container)
+		if !ok {
+			return nil
+		}
+
 		from.Name = container
 		if astutil.IsQualified(from.Name) {
 			parts := astutil.Unqualify(from.Name)
@@ -113,7 +121,7 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 
 		switch node := node.(type) {
 		case *ast.Ident:
-			target, ok := rgb.identReference(fileInfo, node)
+			target, ok := rgb.identReference(fileInfo, node.Name)
 			if ok && from != target {
 				rgb.ReferenceGraph.AddEdge(from, target)
 			}
@@ -131,11 +139,11 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 	return nil
 }
 
-func (rgb *referenceGraphBuilder) identReference(currentFileInfo *fileinfo.FileInfo, ident *ast.Ident) (Declaration, bool) {
-	if currentFileInfo.Declarations.Contains(ident.Name) {
+func (rgb *referenceGraphBuilder) identReference(currentFileInfo *fileinfo.FileInfo, name string) (Declaration, bool) {
+	if currentFileInfo.Declarations.Contains(name) {
 		return Declaration{
 			Parent: currentFileInfo,
-			Name:   ident.Name,
+			Name:   name,
 		}, true
 	}
 
@@ -145,10 +153,10 @@ func (rgb *referenceGraphBuilder) identReference(currentFileInfo *fileinfo.FileI
 		if fileInfo.Package != currentFileInfo.Package {
 			continue
 		}
-		if fileInfo.Declarations.Contains(ident.Name) {
+		if fileInfo.Declarations.Contains(name) {
 			return Declaration{
 				Parent: fileInfo,
-				Name:   ident.Name,
+				Name:   name,
 			}, true
 		}
 	}
