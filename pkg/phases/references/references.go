@@ -26,16 +26,11 @@ import (
 //
 // - [ ] dynamic references, where an ast.SelectorExpr references a field or method on another
 
-type Declaration struct {
-	Parent *fileinfo.FileInfo
-	Name   string
-}
-
 func BuildReferenceGraph(
 	root string,
 	fileInfos map[string]*fileinfo.FileInfo,
 	option walk.Option,
-) (graph.Graph[Declaration], error) {
+) (graph.Graph[fileinfo.Declaration], error) {
 	builder, err := newReferenceGraphBuilder(root, fileInfos)
 	if err != nil {
 		return nil, err
@@ -59,10 +54,10 @@ func BuildReferenceGraph(
 
 type referenceGraphBuilder struct {
 	FileInfos         map[string]*fileinfo.FileInfo
-	ReferenceGraph    graph.Graph[Declaration]
+	ReferenceGraph    graph.Graph[fileinfo.Declaration]
 	Root              string
 	RootModule        string
-	DeclarationLookup map[string]map[string]Declaration
+	DeclarationLookup map[string]map[string]fileinfo.Declaration
 }
 
 func newReferenceGraphBuilder(root string, fileInfos map[string]*fileinfo.FileInfo) (*referenceGraphBuilder, error) {
@@ -80,7 +75,7 @@ func newReferenceGraphBuilder(root string, fileInfos map[string]*fileinfo.FileIn
 	}
 	return &referenceGraphBuilder{
 		FileInfos:         fileInfos,
-		ReferenceGraph:    graph.NewGraph[Declaration](),
+		ReferenceGraph:    graph.NewGraph[fileinfo.Declaration](),
 		Root:              root,
 		RootModule:        modulePath,
 		DeclarationLookup: declarationLookup,
@@ -88,11 +83,8 @@ func newReferenceGraphBuilder(root string, fileInfos map[string]*fileinfo.FileIn
 }
 
 func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.FileInfo, fileAst *ast.File) error {
-	for decl := range fileInfo.Declarations {
-		rgb.ReferenceGraph.AddNode(Declaration{
-			Parent: fileInfo,
-			Name:   decl,
-		})
+	for _, decl := range fileInfo.Declarations {
+		rgb.ReferenceGraph.AddNode(decl)
 	}
 
 	ourModule, err := fileInfoModule(fileInfo, rgb.Root, rgb.RootModule)
@@ -146,19 +138,19 @@ func (rgb *referenceGraphBuilder) Visit(filename string, fileInfo *fileinfo.File
 	return nil
 }
 
-func (rgb *referenceGraphBuilder) identReference(ourModule string, name string) (Declaration, bool) {
+func (rgb *referenceGraphBuilder) identReference(ourModule string, name string) (fileinfo.Declaration, bool) {
 	declarations, ok := rgb.DeclarationLookup[ourModule]
 	if !ok {
-		return Declaration{}, false
+		return fileinfo.Declaration{}, false
 	}
 	declaration, ok := declarations[name]
 	return declaration, ok
 }
 
-func (rgb *referenceGraphBuilder) selectorReference(currentFileInfo *fileinfo.FileInfo, selector *ast.SelectorExpr) (Declaration, bool) {
+func (rgb *referenceGraphBuilder) selectorReference(currentFileInfo *fileinfo.FileInfo, selector *ast.SelectorExpr) (fileinfo.Declaration, bool) {
 	ident, ok := selector.X.(*ast.Ident)
 	if !ok {
-		return Declaration{}, false
+		return fileinfo.Declaration{}, false
 	}
 	selectorName := ident.Name
 
@@ -171,12 +163,12 @@ func (rgb *referenceGraphBuilder) selectorReference(currentFileInfo *fileinfo.Fi
 		}
 	}
 	if !foundImport {
-		return Declaration{}, false
+		return fileinfo.Declaration{}, false
 	}
 
 	moduleDecls, ok := rgb.DeclarationLookup[importDecl.Path]
 	if !ok {
-		return Declaration{}, false
+		return fileinfo.Declaration{}, false
 	}
 	decl, ok := moduleDecls[selector.Sel.Name]
 	return decl, ok
@@ -186,9 +178,9 @@ func makeDeclarationLookup(
 	root string,
 	rootModule string,
 	fileInfos map[string]*fileinfo.FileInfo,
-) (map[string]map[string]Declaration, error) {
+) (map[string]map[string]fileinfo.Declaration, error) {
 	// module -> symbol -> declaration
-	declarationLookup := map[string]map[string]Declaration{}
+	declarationLookup := map[string]map[string]fileinfo.Declaration{}
 	for _, fileInfo := range fileInfos {
 		module, err := fileInfoModule(fileInfo, root, rootModule)
 		if err != nil {
@@ -196,14 +188,11 @@ func makeDeclarationLookup(
 		}
 
 		if _, ok := declarationLookup[module]; !ok {
-			declarationLookup[module] = map[string]Declaration{}
+			declarationLookup[module] = map[string]fileinfo.Declaration{}
 		}
 
-		for decl := range fileInfo.Declarations {
-			declarationLookup[module][decl] = Declaration{
-				Parent: fileInfo,
-				Name:   decl,
-			}
+		for declName, decl := range fileInfo.Declarations {
+			declarationLookup[module][declName] = decl
 		}
 	}
 	return declarationLookup, nil

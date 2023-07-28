@@ -3,7 +3,7 @@ package visualize
 import (
 	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/graph"
-	"github.com/crockeo/schoner/pkg/phases/references"
+	"github.com/crockeo/schoner/pkg/phases/fileinfo"
 	"github.com/crockeo/schoner/pkg/set"
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
@@ -11,9 +11,9 @@ import (
 
 func Visualize(
 	outputPath string,
-	graph graph.Graph[references.Declaration],
-	entrypoints set.Set[references.Declaration],
-	unreachable set.Set[references.Declaration],
+	graph graph.Graph[fileinfo.Declaration],
+	entrypoints set.Set[fileinfo.Declaration],
+	unreachable set.Set[fileinfo.Declaration],
 ) error {
 	gviz := graphviz.New()
 	g, err := gviz.Graph(graphviz.Directed)
@@ -21,7 +21,7 @@ func Visualize(
 		return err
 	}
 
-	nodes := map[references.Declaration]*cgraph.Node{}
+	nodes := map[fileinfo.Declaration]*cgraph.Node{}
 	for decl := range graph {
 		node, err := g.CreateNode(astutil.Qualify(decl.Parent.Filename, decl.Name))
 		node.SetLabel(decl.Name)

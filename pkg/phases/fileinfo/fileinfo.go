@@ -20,17 +20,24 @@ var (
 	ErrImportPathNotString = errors.New("import path is not a string")
 )
 
-type Import struct {
-	Name string
-	Path string
-}
-
 type FileInfo struct {
 	Filename     string
 	Package      string
 	Entrypoints  set.Set[string]
-	Declarations set.Set[string]
+	Declarations map[string]Declaration
 	Imports      set.Set[Import]
+}
+
+type Declaration struct {
+	Parent *FileInfo
+	Name   string
+	Pos    token.Position
+	End    token.Position
+}
+
+type Import struct {
+	Name string
+	Path string
 }
 
 func FindFileInfos(root string, option walk.Option) (map[string]*FileInfo, error) {
@@ -45,7 +52,7 @@ func FindFileInfos(root string, option walk.Option) (map[string]*FileInfo, error
 		if err != nil {
 			return fmt.Errorf("failed to parse AST for `%s`: %w", path, err)
 		}
-		fileInfo, err := parseFileInfo(path, fileAst)
+		fileInfo, err := parseFileInfo(fileset, path, fileAst)
 		if err != nil {
 			return fmt.Errorf("failed to file info for `%s`: %w", path, err)
 		}
@@ -58,12 +65,12 @@ func FindFileInfos(root string, option walk.Option) (map[string]*FileInfo, error
 	return fileInfos, nil
 }
 
-func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
+func parseFileInfo(fileset *token.FileSet, filename string, fileAst *ast.File) (*FileInfo, error) {
 	fileInfo := &FileInfo{
 		Package:      fileAst.Name.Name,
 		Filename:     filename,
 		Entrypoints:  set.NewSet[string](),
-		Declarations: set.NewSet[string](),
+		Declarations: map[string]Declaration{},
 		Imports:      set.NewSet[Import](),
 	}
 
@@ -77,7 +84,12 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 			if astutil.IsQualified(name) {
 				continue
 			}
-			fileInfo.Declarations.Add(name)
+			fileInfo.Declarations[name] = Declaration{
+				Parent: fileInfo,
+				Name:   name,
+				Pos:    fileset.Position(decl.Pos()),
+				End:    fileset.Position(decl.End()),
+			}
 			isInitFunc := name == "init"
 			isMainFunc := fileInfo.Package == "main" && name == "main"
 			if isInitFunc || isMainFunc || isTestFuncDecl(decl) {
@@ -101,7 +113,12 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 						Path: path,
 					})
 				case *ast.TypeSpec:
-					fileInfo.Declarations.Add(spec.Name.Name)
+					fileInfo.Declarations[spec.Name.Name] = Declaration{
+						Parent: fileInfo,
+						Name:   spec.Name.Name,
+						Pos:    fileset.Position(spec.Pos()),
+						End:    fileset.Position(spec.End()),
+					}
 				case *ast.ValueSpec:
 					for _, name := range spec.Names {
 						if name.Name == "_" {
@@ -110,8 +127,12 @@ func parseFileInfo(filename string, fileAst *ast.File) (*FileInfo, error) {
 							// and are used to assert that structs abide by interfaces.
 							continue
 						}
-
-						fileInfo.Declarations.Add(name.Name)
+						fileInfo.Declarations[name.Name] = Declaration{
+							Parent: fileInfo,
+							Name:   name.Name,
+							Pos:    fileset.Position(spec.Pos()),
+							End:    fileset.Position(spec.End()),
+						}
 					}
 				}
 			}

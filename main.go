@@ -73,15 +73,15 @@ func mainImpl() error {
 			return err
 		}
 
-		unreachable := set.NewSet[references.Declaration]()
-		entrypoints := set.NewSet[references.Declaration]()
+		unreachable := set.NewSet[fileinfo.Declaration]()
+		entrypoints := set.NewSet[fileinfo.Declaration]()
 		for decl := range referenceGraph {
 			unreachable.Add(decl)
 			if decl.Parent.Entrypoints.Contains(decl.Name) {
 				entrypoints.Add(decl)
 			}
 		}
-		_ = referenceGraph.DFS(entrypoints.ToSlice(), func(node references.Declaration) error {
+		_ = referenceGraph.DFS(entrypoints.ToSlice(), func(node fileinfo.Declaration) error {
 			unreachable.Remove(node)
 			return nil
 		})
@@ -105,9 +105,9 @@ func mainImpl() error {
 
 func cmdVisualize(
 	root string,
-	referenceGraph graph.Graph[references.Declaration],
-	unreachable set.Set[references.Declaration],
-	entrypoints set.Set[references.Declaration],
+	referenceGraph graph.Graph[fileinfo.Declaration],
+	unreachable set.Set[fileinfo.Declaration],
+	entrypoints set.Set[fileinfo.Declaration],
 ) error {
 	return visualize.Visualize(
 		fmt.Sprintf("%s.svg", filepath.Base(root)),
@@ -117,7 +117,8 @@ func cmdVisualize(
 	)
 }
 
-func cmdUnreachable(root string, unreachable set.Set[references.Declaration]) error {
+func cmdUnreachable(root string, unreachable set.Set[fileinfo.Declaration]) error {
+	unreachableByName := map[string]fileinfo.Declaration{}
 	unreachableNames := make([]string, 0, len(unreachable))
 	for decl := range unreachable {
 		filename := decl.Parent.Filename
@@ -126,11 +127,15 @@ func cmdUnreachable(root string, unreachable set.Set[references.Declaration]) er
 		}
 		filename = filename[len(root):]
 		filename = strings.TrimPrefix(filename, "/")
-		unreachableNames = append(unreachableNames, astutil.Qualify(filename, decl.Name))
+		unreachableName := astutil.Qualify(filename, decl.Name)
+
+		unreachableByName[unreachableName] = decl
+		unreachableNames = append(unreachableNames, unreachableName)
 	}
 	sort.Strings(unreachableNames)
 	for _, unreachableName := range unreachableNames {
-		fmt.Println(unreachableName)
+		decl := unreachableByName[unreachableName]
+		fmt.Println(unreachableName, decl.Pos.Offset, decl.End.Offset)
 	}
 	return nil
 }
