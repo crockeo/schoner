@@ -109,8 +109,7 @@ func unreachableMain(args unreachableArgs) error {
 		}
 		sort.Strings(unreachableNames)
 		for _, unreachableName := range unreachableNames {
-			decl := unreachableByName[unreachableName]
-			fmt.Println(unreachableName, decl.Pos.Offset, decl.End.Offset)
+			fmt.Println(unreachableName)
 		}
 		return nil
 	}
