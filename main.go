@@ -1,14 +1,13 @@
 package main
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/alecthomas/kong"
 	"github.com/crockeo/schoner/pkg/astutil"
 	"github.com/crockeo/schoner/pkg/graph"
 	"github.com/crockeo/schoner/pkg/phases/fileinfo"
@@ -26,130 +25,139 @@ func main() {
 	}
 }
 
-type Command int
+type args struct {
+	Visualize   visualizeArgs   `cmd:"" help:"Visualize references in a project."`
+	Unreachable unreachableArgs `cmd:"" help:"List all unreachable declarations in a project."`
+}
 
-const (
-	CommandVisualize Command = iota
-	CommandUnreachable
-)
+type visualizeArgs struct {
+	OutputDir string   `name:"output-dir" help:"The directory in which .svg files will be generated."`
+	Paths     []string `arg:"" name:"path" help:"List of projects to visualize." type:"path"`
+}
+
+type unreachableArgs struct {
+	Paths []string `arg:"" name:"path" help:"List of projects to analyze." type:"path"`
+}
 
 func mainImpl() error {
-	flag.Parse()
-	args := flag.Args()
-	if len(args) == 0 {
-		return printHelp("")
-	}
-
-	commandStr := args[0]
-	var command Command
-	switch commandStr {
-	case "visualize":
-		command = CommandVisualize
-	case "unreachable":
-		command = CommandUnreachable
+	args := args{}
+	ctx := kong.Parse(&args)
+	switch ctx.Command() {
+	case "visualize <path>":
+		return visualizeMain(args.Visualize)
+	case "unreachable <path>":
+		return unreachableMain(args.Unreachable)
 	default:
-		return printHelp(fmt.Sprintf("unrecognized command: %s", commandStr))
+		panic("unreachable")
 	}
+}
 
-	roots := args[1:]
+func visualizeMain(args visualizeArgs) error {
+	outputDir, err := filepath.Abs(args.OutputDir)
+	if err != nil {
+		return err
+	}
+	// TODO: check that outputDir is actually a directory
 
+	for _, path := range args.Paths {
+		path, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		// TODO: check that path is a directory
+
+		analysis, err := analyzeProject(path)
+		if err != nil {
+			return err
+		}
+		visualize.Visualize(
+			fmt.Sprintf("%s.svg", filepath.Join(outputDir, filepath.Base(path))),
+			analysis.ReferenceGraph,
+			analysis.Entrypoints,
+			analysis.Unreachable,
+		)
+	}
+	return nil
+}
+
+func unreachableMain(args unreachableArgs) error {
+	for _, path := range args.Paths {
+		path, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		// TODO: check that path is a directory
+
+		analysis, err := analyzeProject(path)
+		if err != nil {
+			return err
+		}
+
+		unreachableByName := map[string]fileinfo.Declaration{}
+		unreachableNames := make([]string, 0, len(analysis.Unreachable))
+		for decl := range analysis.Unreachable {
+			filename := decl.Parent.Filename
+			if !strings.HasPrefix(filename, path) {
+				return fmt.Errorf("file %s does not begin with expected path %s", filename, path)
+			}
+			filename = filename[len(path):]
+			filename = strings.TrimPrefix(filename, "/")
+			unreachableName := astutil.Qualify(filename, decl.Name)
+
+			unreachableByName[unreachableName] = decl
+			unreachableNames = append(unreachableNames, unreachableName)
+		}
+		sort.Strings(unreachableNames)
+		for _, unreachableName := range unreachableNames {
+			decl := unreachableByName[unreachableName]
+			fmt.Println(unreachableName, decl.Pos.Offset, decl.End.Offset)
+		}
+		return nil
+	}
+	return nil
+}
+
+type analysis struct {
+	FileInfos      map[string]*fileinfo.FileInfo
+	ReferenceGraph graph.Graph[fileinfo.Declaration]
+	Unreachable    set.Set[fileinfo.Declaration]
+	Entrypoints    set.Set[fileinfo.Declaration]
+}
+
+func analyzeProject(path string) (analysis, error) {
+	// TODO: make these configurable?
 	walkOptions := walk.WithOptions(
 		walk.WithIgnoreDirs(".git"),
 		// walk.WithIgnoreTests(true),
 	)
-	for _, root := range roots {
-		root, err := filepath.Abs(root)
-		if err != nil {
-			return err
-		}
 
-		fileInfos, err := fileinfo.FindFileInfos(root, walkOptions)
-		if err != nil {
-			return err
-		}
-
-		referenceGraph, err := references.BuildReferenceGraph(root, fileInfos, walkOptions)
-		if err != nil {
-			return err
-		}
-
-		unreachable := set.NewSet[fileinfo.Declaration]()
-		entrypoints := set.NewSet[fileinfo.Declaration]()
-		for decl := range referenceGraph {
-			unreachable.Add(decl)
-			if decl.Parent.Entrypoints.Contains(decl.Name) {
-				entrypoints.Add(decl)
-			}
-		}
-		_ = referenceGraph.DFS(entrypoints.ToSlice(), func(node fileinfo.Declaration) error {
-			unreachable.Remove(node)
-			return nil
-		})
-
-		switch command {
-		case CommandVisualize:
-			if err := cmdVisualize(root, referenceGraph, unreachable, entrypoints); err != nil {
-				return err
-			}
-		case CommandUnreachable:
-			if err := cmdUnreachable(root, unreachable); err != nil {
-				return err
-			}
-		default:
-			panic("unreachable")
-		}
-
+	fileInfos, err := fileinfo.FindFileInfos(path, walkOptions)
+	if err != nil {
+		return analysis{}, err
 	}
-	return nil
-}
 
-func cmdVisualize(
-	root string,
-	referenceGraph graph.Graph[fileinfo.Declaration],
-	unreachable set.Set[fileinfo.Declaration],
-	entrypoints set.Set[fileinfo.Declaration],
-) error {
-	return visualize.Visualize(
-		fmt.Sprintf("%s.svg", filepath.Base(root)),
+	referenceGraph, err := references.BuildReferenceGraph(path, fileInfos, walkOptions)
+	if err != nil {
+		return analysis{}, err
+	}
+
+	unreachable := set.NewSet[fileinfo.Declaration]()
+	entrypoints := set.NewSet[fileinfo.Declaration]()
+	for decl := range referenceGraph {
+		unreachable.Add(decl)
+		if decl.Parent.Entrypoints.Contains(decl.Name) {
+			entrypoints.Add(decl)
+		}
+	}
+	_ = referenceGraph.DFS(entrypoints.ToSlice(), func(node fileinfo.Declaration) error {
+		unreachable.Remove(node)
+		return nil
+	})
+
+	return analysis{
+		fileInfos,
 		referenceGraph,
-		entrypoints,
 		unreachable,
-	)
-}
-
-func cmdUnreachable(root string, unreachable set.Set[fileinfo.Declaration]) error {
-	unreachableByName := map[string]fileinfo.Declaration{}
-	unreachableNames := make([]string, 0, len(unreachable))
-	for decl := range unreachable {
-		filename := decl.Parent.Filename
-		if !strings.HasPrefix(filename, root) {
-			return fmt.Errorf("file %s does not begin with expected root %s", filename, root)
-		}
-		filename = filename[len(root):]
-		filename = strings.TrimPrefix(filename, "/")
-		unreachableName := astutil.Qualify(filename, decl.Name)
-
-		unreachableByName[unreachableName] = decl
-		unreachableNames = append(unreachableNames, unreachableName)
-	}
-	sort.Strings(unreachableNames)
-	for _, unreachableName := range unreachableNames {
-		decl := unreachableByName[unreachableName]
-		fmt.Println(unreachableName, decl.Pos.Offset, decl.End.Offset)
-	}
-	return nil
-}
-
-func printHelp(extraMessage string) error {
-	builder := strings.Builder{}
-
-	if extraMessage != "" {
-		fmt.Fprintln(&builder, "Error:", extraMessage)
-	}
-	fmt.Fprintln(&builder, "Usage:")
-	fmt.Fprintln(&builder, "  schoner <visualize|unreachable>")
-	fmt.Fprintln(&builder, "    visualize   -- Prints a .svg of the call graph of a project.")
-	fmt.Fprintln(&builder, "    unreachable -- Prints all unreachable declarations in a project.")
-
-	return errors.New(builder.String())
+		entrypoints,
+	}, nil
 }
